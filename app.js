@@ -96,7 +96,7 @@ const MOODS = [
 ];
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
-let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, expandedRegions:[], expandedParkRegions:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false };
+let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, expandedRegions:[], expandedParkRegions:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, passwordRecovery:false, forgotSent:false };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function money(n){ n = Number(n)||0; return n.toLocaleString('th-TH', {maximumFractionDigits:0}); }
@@ -285,6 +285,10 @@ function render(){
     root.innerHTML = `<div class="loading-wrap">กำลังโหลด…</div>`;
     return;
   }
+  if(state.useSupabase && state.passwordRecovery){
+    root.innerHTML = renderResetPasswordScreen();
+    return;
+  }
   if(state.useSupabase && !state.authUser){
     root.innerHTML = renderAuthScreen();
     return;
@@ -327,6 +331,37 @@ function render(){
 /* ---------- Trips list ---------- */
 function renderAuthScreen(){
   const isSignup = state.authMode==='signup';
+  const isForgot = state.authMode==='forgot';
+
+  if(isForgot){
+    return `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+        <div style="max-width:340px;width:100%;">
+          <div style="text-align:center;margin-bottom:22px;">
+            <img src="${LOGO_HEADER_DATAURI}" alt="Somewhere After Rain" style="width:80px;height:80px;border-radius:50%;margin-bottom:10px;">
+            <div class="eyebrow" style="justify-content:center;">- Somewhere After Rain -</div>
+          </div>
+          <div class="card">
+            <div style="font-weight:700;font-size:17px;margin-bottom:14px;text-align:center;">ลืมรหัสผ่าน</div>
+            ${state.forgotSent ? `
+              <div class="faint" style="text-align:center;margin-bottom:14px;">ถ้าอีเมลนี้มีในระบบ เราได้ส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้แล้ว ลองเช็คกล่องอีเมล (รวมถึง Junk/Spam) แล้วกดลิงก์เพื่อตั้งรหัสผ่านใหม่ได้เลยครับ</div>
+              <button class="btn btn-primary btn-full" onclick="app.backToLogin()">กลับไปหน้าเข้าสู่ระบบ</button>
+            ` : `
+              <div class="faint" style="margin-bottom:14px;">กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ให้ทางอีเมลนั้น</div>
+              ${state.authError ? `<div class="faint" style="color:var(--terracotta);margin-bottom:10px;text-align:center;">${esc(state.authError)}</div>` : ''}
+              <label>อีเมล</label>
+              <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email">
+              <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.submitForgotPassword()" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังส่ง...' : 'ส่งลิงก์รีเซ็ตรหัสผ่าน'}</button>
+              <div class="faint" style="text-align:center;margin-top:14px;">
+                <a href="#" onclick="app.backToLogin();return false;" style="color:var(--olive);font-weight:600;text-decoration:none;">กลับไปหน้าเข้าสู่ระบบ</a>
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
       <div style="max-width:340px;width:100%;">
@@ -341,11 +376,35 @@ function renderAuthScreen(){
           <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email">
           <label>รหัสผ่าน</label>
           <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="${isSignup?'new-password':'current-password'}">
+          ${!isSignup ? `<div style="text-align:right;margin-top:6px;"><a href="#" onclick="app.showForgotPassword();return false;" style="color:var(--text-muted);font-size:13px;text-decoration:none;">ลืมรหัสผ่าน?</a></div>` : ''}
           <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.submitAuth()" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังดำเนินการ...' : (isSignup?'สมัครสมาชิก':'เข้าสู่ระบบ')}</button>
           <div class="faint" style="text-align:center;margin-top:14px;">
             ${isSignup ? 'มีบัญชีอยู่แล้ว? ' : 'ยังไม่มีบัญชี? '}
             <a href="#" onclick="app.toggleAuthMode();return false;" style="color:var(--olive);font-weight:600;text-decoration:none;">${isSignup?'เข้าสู่ระบบ':'สมัครสมาชิก'}</a>
           </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderResetPasswordScreen(){
+  return `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div style="max-width:340px;width:100%;">
+        <div style="text-align:center;margin-bottom:22px;">
+          <img src="${LOGO_HEADER_DATAURI}" alt="Somewhere After Rain" style="width:80px;height:80px;border-radius:50%;margin-bottom:10px;">
+          <div class="eyebrow" style="justify-content:center;">- Somewhere After Rain -</div>
+        </div>
+        <div class="card">
+          <div style="font-weight:700;font-size:17px;margin-bottom:14px;text-align:center;">ตั้งรหัสผ่านใหม่</div>
+          <div class="faint" style="margin-bottom:14px;">กรอกรหัสผ่านใหม่ที่ต้องการใช้เข้าสู่ระบบต่อไปนี้</div>
+          ${state.authError ? `<div class="faint" style="color:var(--terracotta);margin-bottom:10px;text-align:center;">${esc(state.authError)}</div>` : ''}
+          <label>รหัสผ่านใหม่</label>
+          <input id="new-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
+          <label>ยืนยันรหัสผ่านใหม่</label>
+          <input id="new-password-confirm" type="password" placeholder="พิมพ์อีกครั้ง" autocomplete="new-password">
+          <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.submitNewPassword()" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังบันทึก...' : 'บันทึกรหัสผ่านใหม่'}</button>
         </div>
       </div>
     </div>
@@ -1514,6 +1573,57 @@ const app = {
     state.authError = null;
     render();
   },
+  showForgotPassword(){
+    state.authMode = 'forgot';
+    state.authError = null;
+    state.forgotSent = false;
+    render();
+  },
+  backToLogin(){
+    state.authMode = 'login';
+    state.authError = null;
+    state.forgotSent = false;
+    render();
+  },
+  async submitForgotPassword(){
+    const email = document.getElementById('auth-email').value.trim();
+    if(!email){ state.authError = 'กรอกอีเมลก่อนนะครับ'; render(); return; }
+    state.authError = null; state.authBusy = true; render();
+    try{
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.href.split('#')[0].split('?')[0]
+      });
+      if(error) throw error;
+      state.authBusy = false;
+      state.forgotSent = true;
+      render();
+    }catch(e){
+      state.authBusy = false;
+      state.authError = e.message || 'ส่งลิงก์ไม่สำเร็จ ลองใหม่อีกครั้ง';
+      render();
+    }
+  },
+  async submitNewPassword(){
+    const pw = document.getElementById('new-password').value;
+    const pw2 = document.getElementById('new-password-confirm').value;
+    if(!pw || pw.length < 6){ state.authError = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'; render(); return; }
+    if(pw !== pw2){ state.authError = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน'; render(); return; }
+    state.authError = null; state.authBusy = true; render();
+    try{
+      const { error } = await supabaseClient.auth.updateUser({ password: pw });
+      if(error) throw error;
+      state.authBusy = false;
+      state.passwordRecovery = false;
+      state.authMode = 'login';
+      flashInfo('ตั้งรหัสผ่านใหม่เรียบร้อยแล้วครับ');
+      await loadDataFromSupabase();
+      render();
+    }catch(e){
+      state.authBusy = false;
+      state.authError = e.message || 'ตั้งรหัสผ่านใหม่ไม่สำเร็จ ลองใหม่อีกครั้ง';
+      render();
+    }
+  },
   async submitAuth(){
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
@@ -1565,6 +1675,12 @@ window.app = app;
       state.useSupabase = true;
       state.authUser = data.session ? data.session.user : null;
       supabaseClient.auth.onAuthStateChange((event, session)=>{
+        if(event === 'PASSWORD_RECOVERY'){
+          state.passwordRecovery = true;
+          state.authUser = session ? session.user : state.authUser;
+          render();
+          return;
+        }
         const newUser = session ? session.user : null;
         const wasLoggedOut = !state.authUser;
         state.authUser = newUser;
