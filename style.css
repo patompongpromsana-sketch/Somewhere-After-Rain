@@ -136,6 +136,7 @@
   .sheet{
     background: var(--bg); width:100%; max-width:480px; max-height:88vh; overflow-y:auto;
     border-radius:20px 20px 0 0; padding: 18px 18px 28px; border-top:1px solid var(--border);
+    position:relative; /* ให้ .sheet-close เกาะมุมของ sheet ไม่ใช่มุมจอ */
   }
   .sheet-handle{ width:36px; height:4px; background:var(--border); border-radius:3px; margin: 0 auto 14px; }
   .sheet-close{
