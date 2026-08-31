@@ -211,6 +211,21 @@
 
   .loading-wrap{ display:flex; align-items:center; justify-content:center; min-height:100vh; color:var(--text-muted); font-family:'Trirong',serif; }
 
+  /* ป้ายยืนยันการบันทึก โผล่แวบเดียวแล้วจางไป ไม่บังอะไร */
+  .save-pill{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-8px);
+    background: var(--olive); color:#FBF8F1;
+    font-size:12px; padding:5px 12px; border-radius:999px;
+    opacity:0; pointer-events:none; z-index:40;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .save-pill.show{ opacity:.94; transform:translateX(-50%) translateY(0); }
+  .save-pill.err{ background: var(--terracotta); }
+
+  /* บรรทัดชื่อทริปในชีต กดแล้วกระโดดไปหน้าทริป */
+  .link-line{ cursor:pointer; }
+  .link-line:active{ color: var(--olive); }
+
   .toast{
     position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:50;
     max-width:440px; width:calc(100% - 32px);

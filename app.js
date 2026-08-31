@@ -105,7 +105,7 @@ const MOODS = [
 ];
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
-let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
+let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
   remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -124,6 +124,7 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 // ข้ามจากช่องหนึ่งไปอีกช่องโดยตรง DOM จะถูกสร้างใหม่ก่อนโฟกัสจะลง = ต้องแตะสองครั้ง
 // จึงบันทึกค่าไว้ก่อน แล้วค่อย render ตอนที่ผู้ใช้ออกจากช่องกรอกจริงๆ
 let pendingRender = false;
+let focusRestore = null;   // {id, start, end} ของช่องที่ต้องคืนโฟกัสหลัง render
 function markPendingRender(){ pendingRender = true; }
 function isFormField(el){
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
@@ -154,6 +155,33 @@ function navBack(fallback){
   if(navDepth > 0){ history.back(); }   // popstate จะเป็นคนปิดให้
   else { fallback(); }
 }
+// ลงทะเบียน service worker เพื่อให้เปิดแอปได้ตอนไม่มีสัญญาณ
+// ใช้ path แบบ relative จะได้ไม่พังเวลาเปลี่ยนชื่อ repo หรือย้ายโดเมน
+function initServiceWorker(){
+  if(typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+  if(!window.addEventListener) return;
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(e=>{
+      console.warn('service worker register failed', e);
+    });
+  });
+}
+
+// ปิดแท็บหรือสลับแอปทันทีหลังพิมพ์ ต้องไม่เสียของที่ยังค้างใน debounce
+function initFlushOnHide(){
+  if(!window.addEventListener) return;
+  const flush = ()=>{
+    if(isFormField(document.activeElement)){
+      try{ document.activeElement.blur(); }catch(e){}   // ให้ onchange ยิงก่อน
+    }
+    if(saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; triggerSaveNow(); }
+  };
+  window.addEventListener('pagehide', flush);
+  if(document.addEventListener){
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'hidden') flush(); });
+  }
+}
+
 function initHistoryNav(){
   if(!window.addEventListener) return;
   window.addEventListener('popstate', ()=>{
@@ -175,6 +203,21 @@ function sortCheckpoints(list){
     if(!db) return -1;
     return da.localeCompare(db);
   });
+}
+
+let savePillTimer = null;
+// อัปเดตป้ายนี้ด้วยการแตะ DOM ตรงๆ ไม่ผ่าน render()
+// เพราะการเซฟเกิดขึ้นระหว่างที่ผู้ใช้ยังพิมพ์อยู่ ถ้า render จะทำให้โฟกัสหลุด
+function showSavePill(text, isError){
+  const el = document.getElementById('save-pill');
+  if(!el) return;
+  el.textContent = text;
+  el.className = 'save-pill show' + (isError? ' err' : '');
+  if(savePillTimer) clearTimeout(savePillTimer);
+  savePillTimer = setTimeout(()=>{
+    const e2 = document.getElementById('save-pill');
+    if(e2) e2.className = 'save-pill';
+  }, 1600);
 }
 
 let flashTimer = null;
@@ -280,6 +323,7 @@ async function loadDataFromSupabase(){
     // โหลดสำเร็จแล้ว ปลดล็อกการบันทึกอีกครั้ง
     state.loadFailed = false;
     state.conflict = false;
+    if(purgeOldTrash()) scheduleSave();
     checkOfflineBackup();
   }catch(e){
     console.error('load from supabase failed', e);
@@ -308,7 +352,7 @@ async function storageSet(key, value){
 async function loadData(){
   try{
     const r = await storageGet(STORAGE_KEY);
-    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); }
+    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); purgeOldTrash(); }
   }catch(e){ /* no data yet */ }
 }
 let saveInFlight = false;
@@ -342,15 +386,17 @@ async function doSave(retrying){
             return;
           }
           // ไม่มีแถวอยู่จริง (เพิ่งถูกลบ) ให้สร้างใหม่
-          const ins = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload });
-          error = ins.error;
+          const ins = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload }).select('updated_at');
+          rows = ins.data; error = ins.error;
         }
       } else {
-        const res = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload });
-        error = res.error;
+        const res = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload }).select('updated_at');
+        rows = res.data; error = res.error;
       }
       if(error) throw error;
-      state.remoteVersion = stamp;
+      // ต้องอ่านค่าที่ฐานข้อมูลบันทึกจริง ไม่ใช่ค่าที่เราส่งไป
+      // เผื่อว่าตารางมี trigger/default ที่เขียน updated_at ทับเอง ไม่งั้นรอบถัดไปจะแจ้งชนกันทั้งที่ไม่ได้ชน
+      state.remoteVersion = (Array.isArray(rows) && rows[0] && rows[0].updated_at) ? rows[0].updated_at : stamp;
     } else {
       await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips}));
       // อยู่ในโหมดสำรองเพราะต่อคลาวด์ไม่ได้: จดไว้ด้วยว่านี่คือของที่ยังไม่ได้ซิงก์
@@ -358,6 +404,7 @@ async function doSave(retrying){
         try{ localStorage.setItem(OFFLINE_KEY, JSON.stringify({savedAt: new Date().toISOString(), trips: state.trips})); }catch(e){}
       }
     }
+    showSavePill('บันทึกแล้ว');
     // เคลียร์เฉพาะ toast แจ้งเซฟพลาดเท่านั้น
     // ถ้าเคลียร์ทุกโหมด ข้อความเตือนจาก flashInfo() จะหายก่อนผู้ใช้ทันอ่าน
     if(state.toastMode === 'save-error' && state.toast){ state.toast = null; render(); }
@@ -411,7 +458,8 @@ function normalizeCheckpoint(raw){
   return { ...c,
     id: typeof c.id==='string' && c.id ? c.id : uid(),
     name: typeof c.name==='string' ? c.name : '(ไม่มีชื่อ)',
-    province: ALL_PROVINCES.includes(c.province) ? c.province : '',
+    // เก็บค่าเดิมไว้แม้สะกดไม่ตรงรายชื่อจังหวัด ไม่งั้น import ไฟล์ที่เขียนต่างกันนิดเดียวแล้วข้อมูลหายเงียบๆ
+    province: typeof c.province==='string' ? c.province : '',
     date: typeof c.date==='string' ? c.date : '',
     visited: !!c.visited,
     parkKey: typeof c.parkKey==='string' ? c.parkKey : null,
@@ -490,17 +538,66 @@ function normalizeTrips(list){
 }
 function activeTrips(){ return state.trips.filter(t=>!t.deleted); }
 
+// ทริปในถังขยะเก็บไว้ 30 วันแล้วลบจริง ไม่งั้นค้างสะสมและถูกอัปขึ้นคลาวด์ทุกครั้งที่เซฟ
+const TRASH_KEEP_DAYS = 30;
+function trashDaysLeft(t){
+  if(!t.deletedAt) return TRASH_KEEP_DAYS;
+  const passed = (Date.now() - t.deletedAt) / 86400000;
+  return Math.max(0, Math.ceil(TRASH_KEEP_DAYS - passed));
+}
+function purgeOldTrash(){
+  const before = state.trips.length;
+  state.trips = state.trips.filter(t=>{
+    if(!t.deleted) return true;
+    if(!t.deletedAt) return true;         // ไม่รู้วันลบ เก็บไว้ก่อน ปลอดภัยกว่า
+    return trashDaysLeft(t) > 0;
+  });
+  return before !== state.trips.length;
+}
+
+// สถานที่เดียวกันที่บันทึกซ้ำในทริปเดียว วันเดียว = ไปครั้งเดียว
+// (เผลอกดเพิ่มจุดแวะซ้ำได้ง่าย ไม่ควรทำให้ตัวเลขพองขึ้น)
+function sameVisitKey(v){ return (v.trip||'') + '|' + (v.date||''); }
+function placeIdentity(c){
+  return c.parkKey || String(c.name||'').trim().replace(/\s+/g,' ').toLowerCase();
+}
+function dedupeVisits(visits){
+  const seen = new Set();
+  return visits.filter(v=>{
+    const k = sameVisitKey(v);
+    if(seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+// จัดกลุ่มให้สถานที่เดียวกันขึ้นแถวเดียว แล้วบอกใต้ชื่อว่าไปกับทริปไหนบ้าง
+function groupByPlace(visits){
+  const byPlace = new Map();
+  visits.forEach(v=>{
+    if(!byPlace.has(v.place)) byPlace.set(v.place, {name:v.name, key:v.place, entries:[]});
+    byPlace.get(v.place).entries.push(v);
+  });
+  return [...byPlace.values()].map(g=>{
+    const entries = dedupeVisits(g.entries);
+    return { name:g.name, key:g.key, times:entries.length, entries };
+  });
+}
+
 function provinceStats(){
   const map = {};
-  ALL_PROVINCES.forEach(p=> map[p] = {count:0, visits:[]});
+  ALL_PROVINCES.forEach(p=> map[p] = {count:0, visitCount:0, visits:[], groups:[]});
   activeTrips().forEach(t=>{
     if(t.status === 'planning') return; // ทริปที่ยังวางแผนอยู่ ยังไม่นับว่าไปจริงบนแผนที่
     (t.checkpoints||[]).forEach(c=>{
       if(c.visited && c.province && map[c.province]){
-        map[c.province].count++;
-        map[c.province].visits.push({trip:t.name, date:c.date, name:c.name, mood:c.mood});
+        map[c.province].visits.push({tripId:t.id, trip:t.name, date:c.date, name:c.name, place:placeIdentity(c)});
       }
     });
+  });
+  ALL_PROVINCES.forEach(p=>{
+    const g = groupByPlace(map[p].visits);
+    map[p].groups = g;
+    map[p].count = g.length;                                  // นับเป็น "กี่ที่" ไม่ใช่ "กี่ครั้ง"
+    map[p].visitCount = g.reduce((s,x)=>s+x.times, 0);        // รวมการไปซ้ำ
   });
   return map;
 }
@@ -511,10 +608,14 @@ function parkStats(){
     if(t.status === 'planning') return;
     (t.checkpoints||[]).forEach(c=>{
       if(c.visited && c.parkKey && map[c.parkKey]){
-        map[c.parkKey].count++;
-        map[c.parkKey].visits.push({trip:t.name, date:c.date, name:c.name, mood:c.mood});
+        map[c.parkKey].visits.push({tripId:t.id, trip:t.name, date:c.date, name:c.name});
       }
     });
+  });
+  // ที่เดิม ทริปเดิม วันเดิม = ไปครั้งเดียว ต่างทริปถึงจะนับเป็นการกลับไปอีกครั้งจริงๆ
+  PARKS_DATA.forEach(p=>{
+    map[p.key].visits = dedupeVisits(map[p.key].visits);
+    map[p.key].count = map[p.key].visits.length;
   });
   return map;
 }
@@ -608,6 +709,7 @@ function renderApp(){
         <button class="btn btn-ghost btn-full" style="margin-top:6px;" onclick="app.discardOfflineBackup()">ทิ้งข้อมูลออฟไลน์ ใช้ของบนคลาวด์</button>
       </div>
     ` : ''}
+    <div id="save-pill" class="save-pill" aria-live="polite"></div>
     ${state.tab!=='help' ? `<button class="help-fab" onclick="app.goTab('help')" aria-label="วิธีใช้">?</button>` : ''}
     <div class="app">
       <div class="content">${body}</div>
@@ -623,6 +725,18 @@ function renderApp(){
     ${renderSheet(stats, pstats)}
     ${renderConfirmDialog()}
   `;
+
+  // คืนโฟกัส/เคอร์เซอร์ให้ช่องที่กำลังพิมพ์อยู่ (DOM ถูกสร้างใหม่ทั้งก้อนทุกครั้งที่ render)
+  if(focusRestore){
+    const el = document.getElementById(focusRestore.id);
+    if(el){
+      try{
+        el.focus();
+        if(el.setSelectionRange) el.setSelectionRange(focusRestore.start, focusRestore.end);
+      }catch(e){}
+    }
+    focusRestore = null;
+  }
 }
 
 /* ---------- Trips list ---------- */
@@ -1058,7 +1172,7 @@ function renderDashboard(stats){
             ${r.provinces.map(p=>{
               const c = stats[p].count;
               const cls = c===0? '' : c===1? 'v1' : c===2? 'v2' : 'v3';
-              return `<div class="plate ${cls}" onclick="app.openSheet('province','${encodeURIComponent(p)}')">${p}${c>0?`<span class="cnt">${c} ครั้ง</span>`:''}</div>`;
+              return `<div class="plate ${cls}" onclick="app.openSheet('province','${encodeURIComponent(p)}')">${p}${c>0?`<span class="cnt">${c} ที่</span>`:''}</div>`;
             }).join('')}
           </div>
         ` : ''}
@@ -1090,9 +1204,31 @@ function renderParks(pstats){
       <div class="muted">ไปแล้ว</div>
       <div class="stat-num" style="font-size:28px;margin-top:2px;">${visitedCount}<span style="font-size:14px;color:var(--text-faint);">/${PARKS_DATA.length}</span></div>
     </div>
-    <div class="muted" style="margin-bottom:10px;">แตะจังหวัดบนแผนที่ดูอุทยาน/เขตในจังหวัดนั้น หรือเลือกจากรายชื่อด้านล่างก็ได้</div>
+    <div class="muted" style="margin-bottom:10px;">แตะจังหวัดบนแผนที่ดูอุทยาน/เขตในจังหวัดนั้น หรือค้นหา/เลือกจากรายชื่อด้านล่างก็ได้</div>
 
-    ${PARK_REGION_GROUPS.filter(g=>g.parks.length>0).map(g=>{
+    <input id="park-search" type="search" placeholder="ค้นหาชื่ออุทยานหรือจังหวัด…" value="${esc(state.parkQuery||'')}" oninput="app.setParkQuery(this)" style="margin-bottom:12px;">
+
+    ${(()=>{
+      const q = (state.parkQuery||'').trim().toLowerCase();
+      if(!q) return '';
+      const hits = PARKS_DATA.filter(p=> (p.name+' '+p.province).toLowerCase().includes(q));
+      if(hits.length===0) return `<div class="card"><div class="faint" style="text-align:center;padding:6px;">ไม่พบชื่อนี้ ลองพิมพ์สั้นลงหรือเช็คตัวสะกดดูนะครับ</div></div>`;
+      return `
+        <div class="card">
+          <div class="faint" style="margin-bottom:8px;">พบ ${hits.length} แห่ง</div>
+          <div class="plate-grid">
+            ${hits.slice(0,60).map(p=>{
+              const c = pstats[p.key].count;
+              const cls = c===0? '' : c===1? 'v1' : c===2? 'v2' : 'v3';
+              return `<div class="plate ${cls}" onclick="app.openSheet('park','${encodeURIComponent(p.key)}')">${esc(p.name)}<span class="faint" style="display:block;font-size:9px;">${esc(p.province)}</span>${c>0?`<span class="cnt">${c} ครั้ง</span>`:''}</div>`;
+            }).join('')}
+          </div>
+          ${hits.length>60? `<div class="faint" style="margin-top:8px;">แสดง 60 แห่งแรก พิมพ์ให้เจาะจงขึ้นเพื่อดูที่เหลือ</div>`:''}
+        </div>
+      `;
+    })()}
+
+    ${state.parkQuery ? '' : PARK_REGION_GROUPS.filter(g=>g.parks.length>0).map(g=>{
       const expanded = state.expandedParkRegions.includes(g.name);
       const visitedInRegion = g.parks.filter(p=>pstats[p.key].count>0).length;
       return `
@@ -1159,8 +1295,8 @@ function sheetPark(key, pstats){
     ${info.visits.length===0? `<div class="faint">ยังไม่เคยไปที่นี่</div>` :
       info.visits.map(v=>`
         <div class="cp-item">
-          <div class="row"><div style="font-weight:600;">${esc(v.name)}</div>${v.mood? `<span class="mood-badge">${MOODS.find(m=>m.v===v.mood)?.e||''}</span>`:''}</div>
-          <div class="faint">${esc(v.trip)} · ${fmtDate(v.date)}</div>
+          <div style="font-weight:600;">${esc(v.name)}</div>
+          <div class="faint link-line" onclick="app.openTripFrom('${v.tripId}')">${esc(v.trip)} · ${fmtDate(v.date)} →</div>
         </div>
       `).join('')
     }
@@ -1354,7 +1490,7 @@ function renderHelp(){
       + '② ระหว่าง/หลังเดินทาง — กดปุ่ม "ไปแล้ว" ที่จุดนั้นได้เลย<br>'
       + 'ส่วนความรู้สึกและบันทึกความทรงจำ ย้ายไปเขียนรวมทั้งทริปที่แท็บ <b style="color:var(--text);">พื้นที่ความทรงจำ</b> แทน (ไม่ได้แยกเขียนทีละจุดแวะแล้ว)<br>'
       + 'ถ้ามีจุดแวะตั้งแต่ 2 จุดขึ้นไป จะมีการ์ด <b style="color:var(--text);">"🧭 จาก [จุด A] → [จุด B]"</b> คั่นระหว่างแต่ละจุดโดยอัตโนมัติ กดปุ่ม "คำนวณระยะทาง &amp; เวลา" เพื่อดึงระยะทางถนนจริง (กม.) และเวลาขับโดยประมาณ (ชั่วโมง/นาที) มาให้ฟรี ไม่ต้องมี API key (ต้องมีอินเทอร์เน็ต)<br>'
-      + 'แต่ละจุดแวะยังมีปุ่ม <b style="color:var(--text);">"💰 ค่าใช้จ่าย"</b> ให้กดบันทึกค่าใช้จ่าย ณ จุดนั้นได้ทันที โดยจะเติมชื่อสถานที่ในช่องหมายเหตุให้อัตโนมัติ กดซ้ำได้เรื่อยๆ ถ้าจุดเดียวมีหลายรายการ (เช่น ค่าจอดรถ + ค่าเข้าสถานที่) แต่ละครั้งจะแยกเป็นคนละรายการในลิสต์ค่าใช้จ่ายของทริปตามปกติ แค่ติดป้ายว่าเกิดที่ไหนให้ดูง่าย<br>'
+      + 'ค่าใช้จ่ายไม่ต้องบันทึกทีละจุดแวะแล้ว ไปกรอกรวมทีเดียวที่แท็บย่อย <b style="color:var(--text);">งบประมาณ</b> โดยใส่เป็นตัวเลข "งบ" กับ "ใช้จริง" ของแต่ละหมวดตรงๆ<br>'
       + 'ช่อง <b style="color:var(--text);">"อยู่ในอุทยานแห่งชาติ/เขตอนุรักษ์ไหน"</b> จะกรองรายชื่อให้เหลือเฉพาะของจังหวัดที่เลือกไว้ด้านบนอัตโนมัติ (เลือกจังหวัดก่อน ลิสต์อุทยานจะสั้นลงเอง หาง่ายขึ้นเยอะ)<br>'
       + 'ถ้ามีจุดแวะตั้งแต่ 2 จุดขึ้นไป ด้านบนสุดจะมีการ์ด <b style="color:var(--text);">"🧭 แผนที่เส้นทาง"</b> กดวาดเส้นทางจะได้แผนที่ประเทศไทยย่อๆ พร้อมเส้นตรงเชื่อมจุดแวะตามลำดับวันที่ (ไม่อิงถนนจริง) ใช้ฟรี — ถ้าแก้ชื่อ/จังหวัดของจุดแวะทีหลัง แผนที่จะรู้ว่าต้องคำนวณใหม่ให้เอง'
     )}
@@ -1368,7 +1504,7 @@ function renderHelp(){
     )}
 
     ${helpSection('🗺️','ดูภาพรวมการเที่ยว',
-      'แท็บ <b style="color:var(--text);">ประเทศไทย</b> จะไล่สีจังหวัดตามจำนวนครั้งที่ไปโดยอัตโนมัติ (คำนวณจากจุดแวะที่ติ๊กว่า "ไปแล้ว" เท่านั้น) แตะจังหวัดบนแผนที่เพื่อดูว่าไปตอนไหน ทริปไหนบ้าง ด้านล่างแผนที่ยังมีรายชื่อจังหวัดแยกตามภาค กดชื่อภาคเพื่อขยาย/ย่อดูรายชื่อได้<br>'
+      'แท็บ <b style="color:var(--text);">ประเทศไทย</b> จะไล่สีจังหวัดตามจำนวนสถานที่ที่ไปมาแล้วโดยอัตโนมัติ (คำนวณจากจุดแวะที่ติ๊กว่า "ไปแล้ว" เท่านั้น) แตะจังหวัดบนแผนที่เพื่อดูว่าไปที่ไหนบ้าง ทริปไหน ตอนไหน — สถานที่เดียวกันที่ไปซ้ำจะรวมเป็นแถวเดียวและนับเป็น 1 ที่ ด้านล่างแผนที่ยังมีรายชื่อจังหวัดแยกตามภาค กดชื่อภาคเพื่อขยาย/ย่อดูรายชื่อได้<br>'
       + '<b style="color:var(--text);">ข้อควรรู้:</b> จุดแวะในทริปที่สถานะยังเป็น "กำลังวางแผน" จะยังไม่นับขึ้นแผนที่ ต้องเปลี่ยนสถานะทริปเป็น "กำลังเดินทาง" หรือ "เสร็จสิ้นแล้ว" ก่อน'
     )}
 
@@ -1438,7 +1574,6 @@ function renderSheet(stats, pstats){
   if(type==='new-trip') inner = sheetNewTrip();
   else if(type==='new-cp') inner = sheetCheckpoint(a, null);
   else if(type==='edit-cp') inner = sheetCheckpoint(a, b);
-  else if(type==='new-expense') inner = sheetExpense(a, b ? decodeURIComponent(b) : null);
   else if(type==='province') inner = sheetProvince(decodeURIComponent(a), stats);
   else if(type==='park') inner = sheetPark(decodeURIComponent(a), pstats);
   else if(type==='province-parks') inner = sheetProvinceParks(decodeURIComponent(a), pstats);
@@ -1516,32 +1651,24 @@ function sheetCheckpoint(tripId, cpId){
   `;
 }
 
-function sheetExpense(tripId, placeName){
-  return `
-    <h2 style="margin-top:0;">เพิ่มค่าใช้จ่าย</h2>
-    ${placeName ? `<div class="faint" style="margin-bottom:4px;">📍 ที่ ${esc(placeName)}</div>` : ''}
-    <label>หมวดหมู่</label>
-    <select id="f-excat">${EXPENSE_CATS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
-    <label>จำนวนเงิน (บาท)</label>
-    <input id="f-examt" type="number" inputmode="numeric" min="0" placeholder="0">
-    <label>วันที่</label>
-    <input id="f-exdate" type="date">
-    <label>หมายเหตุ (ถ้ามี)</label>
-    <input id="f-exnote" placeholder="เช่น ปั๊ม ปตท. สระบุรี" value="${placeName? esc(placeName):''}">
-    <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.saveExpense('${tripId}')">บันทึก</button>
-  `;
-}
-
 function sheetProvince(p, stats){
-  const info = stats[p] || {count:0, visits:[]};
+  const info = stats[p] || {count:0, visitCount:0, visits:[], groups:[]};
+  const groups = info.groups || [];
   return `
     <h2 style="margin-top:0;">${p}</h2>
-    <div class="muted" style="margin-bottom:14px;">ไปมาแล้ว ${info.count} ครั้ง</div>
-    ${info.visits.length===0? `<div class="faint">ยังไม่เคยไปจังหวัดนี้</div>` :
-      info.visits.map(v=>`
+    <div class="muted" style="margin-bottom:14px;">
+      ไปมาแล้ว ${info.count} ที่${info.visitCount>info.count? ` · แวะรวม ${info.visitCount} ครั้ง` : ''}
+    </div>
+    ${groups.length===0? `<div class="faint">ยังไม่เคยไปจังหวัดนี้</div>` :
+      groups.map(g=>`
         <div class="cp-item">
-          <div class="row"><div style="font-weight:600;">${esc(v.name)}</div>${v.mood? `<span class="mood-badge">${MOODS.find(m=>m.v===v.mood)?.e||''}</span>`:''}</div>
-          <div class="faint">${esc(v.trip)} · ${fmtDate(v.date)}</div>
+          <div class="row">
+            <div style="font-weight:600;">${esc(g.name)}</div>
+            <div class="row" style="gap:6px;">
+              ${g.times>1? `<span class="faint">ไปซ้ำ ${g.times} ครั้ง</span>`:''}
+            </div>
+          </div>
+          ${g.entries.map(e=>`<div class="faint link-line" onclick="app.openTripFrom('${e.tripId}')">${esc(e.trip)} · ${fmtDate(e.date)} →</div>`).join('')}
         </div>
       `).join('')
     }
@@ -1552,12 +1679,13 @@ function sheetTrash(){
   const trashed = state.trips.filter(t=>t.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
   return `
     <h2 style="margin-top:0;">ถังขยะ</h2>
-    <div class="muted" style="margin-bottom:12px;">ทริปที่ลบจะอยู่ที่นี่ กู้คืนได้จนกว่าจะกดลบถาวร</div>
+    <div class="muted" style="margin-bottom:12px;">ทริปที่ลบจะอยู่ที่นี่ ${TRASH_KEEP_DAYS} วัน กู้คืนได้ตลอดในช่วงนั้น พ้นกำหนดแล้วระบบจะลบถาวรให้เอง</div>
     ${trashed.length===0? `<div class="faint" style="text-align:center;padding:20px 0;">ไม่มีทริปในถังขยะ</div>` :
       trashed.map(t=>`
         <div class="cp-item">
           <div style="font-weight:600;">${esc(t.name)}</div>
           <div class="faint">${fmtDate(t.startDate)} – ${fmtDate(t.endDate)}</div>
+          <div class="faint" style="margin-top:2px;${trashDaysLeft(t)<=7?'color:var(--terracotta);':''}">${t.deletedAt? `จะถูกลบถาวรอัตโนมัติในอีก ${trashDaysLeft(t)} วัน` : 'ไม่ทราบวันที่ลบ จะเก็บไว้จนกว่าจะลบเอง'}</div>
           <div style="margin-top:8px;display:flex;gap:8px;">
             <button class="btn btn-primary btn-sm" onclick="app.restoreTrip('${t.id}')">↩️ กู้คืน</button>
             <button class="btn btn-danger btn-sm" onclick="app.permanentlyDeleteTrip('${t.id}')">ลบถาวร</button>
@@ -1596,6 +1724,12 @@ const app = {
     else state.expandedRegions = [...state.expandedRegions, name];
     render();
   },
+  // ช่องค้นหาต้อง render ใหม่ทุกตัวอักษร เลยต้องคืนโฟกัสและตำแหน่งเคอร์เซอร์ให้ด้วย
+  setParkQuery(el){
+    state.parkQuery = el.value;
+    focusRestore = { id:'park-search', start: el.selectionStart, end: el.selectionEnd };
+    render();
+  },
   toggleParkRegion(name){
     if(state.expandedParkRegions.includes(name)) state.expandedParkRegions = state.expandedParkRegions.filter(r=>r!==name);
     else state.expandedParkRegions = [...state.expandedParkRegions, name];
@@ -1623,6 +1757,15 @@ const app = {
     const t = findTrip(tripId);
     if(t) t.diaryText = val;
     markPendingRender(); scheduleSave();
+  },
+  // กดชื่อทริปในหน้าจังหวัด/อุทยาน แล้วกระโดดไปหน้าทริปนั้นเลย
+  openTripFrom(id){
+    if(!findTrip(id)){ flashInfo('ไม่พบทริปนี้แล้ว อาจถูกลบไป'); return; }
+    state.sheet = null;
+    state.tab = 'trips';
+    state.activeTripId = id;
+    state.tripSubtab = 'stops';
+    render();
   },
   closeTrip(){ navBack(()=>{ state.activeTripId = null; render(); }); },
   setSubtab(s){ state.tripSubtab = s; render(); },
@@ -1676,10 +1819,23 @@ const app = {
       flashInfo('วันที่ของจุดแวะนี้อยู่นอกช่วงวันเดินทางของทริป ลองตรวจสอบดูนะครับ (ระบบบันทึกให้ตามที่กรอกไว้ก่อน แก้ไขทีหลังได้)');
     }
     t.checkpoints = t.checkpoints || [];
+
+    // กันเพิ่มจุดเดิมซ้ำโดยไม่ตั้งใจ ซึ่งเป็นเรื่องที่เกิดง่ายมากตอนกรอกหลายจุดรวดเดียว
+    const newIdentity = placeIdentity({ name, parkKey });
+    const twin = t.checkpoints.find(c=> c.id !== cpId && placeIdentity(c) === newIdentity && c.province === province);
+    if(twin){
+      if((twin.date||'') === (date||'')){
+        flashInfo('จุดนี้มีอยู่ในทริปแล้วในวันเดียวกัน ถ้าตั้งใจจะแวะสองรอบ ลองใส่วันที่ให้ต่างกันนะครับ');
+        return;
+      }
+      flashInfo('จุดนี้เคยอยู่ในทริปนี้แล้ว บันทึกเพิ่มให้เป็นการแวะอีกครั้งคนละวัน');
+    }
+
     if(cpId){
       // editing existing checkpoint: only name/province/date/park come from this form;
       // visited/mood/note are controlled inline in the stops list, so leave them untouched.
       const cp = t.checkpoints.find(c=>c.id===cpId);
+      if(!cp){ flashInfo('ไม่พบจุดแวะนี้แล้ว อาจถูกลบไประหว่างทาง'); return; }
       const locationChanged = cp.name!==name || cp.province!==province;
       Object.assign(cp, { name, province, date, parkKey });
       if(locationChanged){
@@ -1777,29 +1933,6 @@ const app = {
     t.budget = EXPENSE_CATS.reduce((s,c)=>s+Number(catBudgets[c]||0),0);
     render(); scheduleSave();
   },
-  async saveExpense(tripId){
-    const t = findTrip(tripId);
-    if(!t){ flashInfo('ไม่พบทริปนี้แล้ว อาจถูกลบไประหว่างทาง'); return; }
-    const amount = Number(document.getElementById('f-examt').value)||0;
-    if(amount<=0){ flashInfo('กรอกจำนวนเงินก่อนนะครับ'); return; }
-    const date = document.getElementById('f-exdate').value;
-    if(date && t.startDate && t.endDate && (date < t.startDate || date > t.endDate)){
-      flashInfo('วันที่ของค่าใช้จ่ายนี้อยู่นอกช่วงวันเดินทางของทริป ลองตรวจสอบดูนะครับ (ระบบบันทึกให้ตามที่กรอกไว้ก่อน แก้ไขทีหลังได้)');
-    }
-    t.expenses = t.expenses || [];
-    t.expenses.push({
-      id: uid(),
-      category: document.getElementById('f-excat').value,
-      amount,
-      date,
-      note: document.getElementById('f-exnote').value.trim()
-    });
-    // ปิดผ่าน navBack เพื่อให้ประวัติของปุ่ม Back ไม่ค้างเกินจริง
-    scheduleSave(); navBack(()=>{ state.sheet = null; render(); });
-  },
-  deleteExpense(tripId, expId){
-    askConfirm('ลบรายการค่าใช้จ่ายนี้ไหมครับ? กู้คืนไม่ได้', 'deleteExpense', {tripId, expId});
-  },
 
   confirmDeleteTrip(id){
     askConfirm('ย้ายทริปนี้ไปถังขยะไหมครับ? กู้คืนได้ภายหลังจากไอคอน "?" มุมบน > ถังขยะ (ยังไม่ลบถาวรตอนนี้)', 'trashTrip', {id});
@@ -1825,13 +1958,10 @@ const app = {
     } else if(c.type==='importData'){
       state.trips = normalizeTrips(c.payload.data.trips);
       flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ');
-    } else if(c.type==='deleteCheckpoint'){
+} else if(c.type==='deleteCheckpoint'){
       const t = findTrip(c.payload.tripId);
       if(t) t.checkpoints = (t.checkpoints||[]).filter(x=>x.id!==c.payload.cpId);
-    } else if(c.type==='deleteExpense'){
-      const t = findTrip(c.payload.tripId);
-      if(t) t.expenses = (t.expenses||[]).filter(x=>x.id!==c.payload.expId);
-    }
+        }
     render(); scheduleSave();
   },
 
@@ -2030,6 +2160,8 @@ function readAuthLinkError(){
 (async function init(){
   initDeferredRender();
   initHistoryNav();
+  initFlushOnHide();
+  initServiceWorker();
   const linkError = readAuthLinkError();
   if(linkError){ state.authMode = 'reset'; state.authError = linkError; }
   if(supabaseClient){
