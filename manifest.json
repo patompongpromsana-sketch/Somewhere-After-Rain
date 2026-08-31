@@ -1,0 +1,21 @@
+{
+  "name": "Somewhere After Rain",
+  "short_name": "After Rain",
+  "description": "สมุดบันทึกการเดินทางส่วนตัว เก็บทริป จุดแวะ ค่าใช้จ่าย และตราปั๊มอุทยานทั่วไทย",
+  "lang": "th",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F3EDE3",
+  "theme_color": "#F3EDE3",
+  "icons": [
+    {
+      "src": "logo.webp",
+      "sizes": "360x360",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}

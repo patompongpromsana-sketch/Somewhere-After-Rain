@@ -85,7 +85,7 @@ const CUSTOM_STAMPS = {
   if(CUSTOM_STAMPS[src] && !CUSTOM_STAMPS[dest]) CUSTOM_STAMPS[dest] = CUSTOM_STAMPS[src];
 });
 
-const LOGO_HEADER_DATAURI = 'data:image/webp;base64,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';
+const LOGO_HEADER_DATAURI = 'logo.webp';  // แยกเป็นไฟล์เพื่อให้เบราว์เซอร์แคชได้ ไม่ต้อง decode ใหม่ทุก render
 const MAP_VIEW = {w:480, h:879};
 const PROJ_MINX = 97.35140100100011;
 const PROJ_MAXY = 20.444024557000063;
@@ -105,12 +105,78 @@ const MOODS = [
 ];
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
-let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false };
+let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
+  remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function money(n){ n = Number(n)||0; return n.toLocaleString('th-TH', {maximumFractionDigits:0}); }
+function fmtDateTime(iso){
+  try{
+    const dt = new Date(iso);
+    if(isNaN(dt.getTime())) return '';
+    return dt.toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }catch(e){ return ''; }
+}
 function fmtDate(d){ if(!d) return '—'; const dt = new Date(d+'T00:00:00'); return dt.toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}); }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+// ---- การแก้ไขในช่องข้อความ ----
+// ช่อง text/number ห้ามเรียก render() ทันทีที่ onchange ยิง เพราะถ้าผู้ใช้แตะ
+// ข้ามจากช่องหนึ่งไปอีกช่องโดยตรง DOM จะถูกสร้างใหม่ก่อนโฟกัสจะลง = ต้องแตะสองครั้ง
+// จึงบันทึกค่าไว้ก่อน แล้วค่อย render ตอนที่ผู้ใช้ออกจากช่องกรอกจริงๆ
+let pendingRender = false;
+function markPendingRender(){ pendingRender = true; }
+function isFormField(el){
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+}
+function initDeferredRender(){
+  if(!document.addEventListener) return;
+  document.addEventListener('focusout', ()=>{
+    if(!pendingRender) return;
+    // รอให้โฟกัสไปลงที่ปลายทางก่อน แล้วค่อยตัดสินใจ
+    setTimeout(()=>{
+      if(!pendingRender) return;
+      if(isFormField(document.activeElement)) return; // ย้ายไปอีกช่อง ยังไม่ต้อง render
+      pendingRender = false;
+      render();
+    }, 0);
+  });
+}
+
+// ---- ปุ่ม Back ของมือถือ ----
+// ทุกครั้งที่เปิด sheet หรือเข้าหน้าทริป จะ push ประวัติหลอกไว้ 1 ชั้น
+// ปุ่ม Back จึงถอยทีละชั้นในแอปแทนที่จะเด้งออกจากเว็บไปเลย
+let navDepth = 0;
+function navPush(){
+  try{ history.pushState({app:true}, ''); navDepth++; }catch(e){}
+}
+// ใช้แทนการปิดเองตรงๆ เพื่อให้ประวัติกับหน้าจอตรงกันเสมอ
+function navBack(fallback){
+  if(navDepth > 0){ history.back(); }   // popstate จะเป็นคนปิดให้
+  else { fallback(); }
+}
+function initHistoryNav(){
+  if(!window.addEventListener) return;
+  window.addEventListener('popstate', ()=>{
+    if(navDepth > 0) navDepth--;
+    if(state.confirmDialog){ state.confirmDialog = null; render(); return; }
+    if(state.sheet){ state.sheet = null; render(); return; }
+    if(state.activeTripId){ state.activeTripId = null; render(); return; }
+    // ไม่มีอะไรให้ปิดแล้ว ปล่อยให้เบราว์เซอร์ถอยออกไปตามปกติ
+  });
+}
+
+// จุดแวะเรียงตามวันที่ ส่วนจุดที่ยังไม่ใส่วันที่ให้ไปต่อท้าย
+// (ถ้าเทียบสตริงตรงๆ ค่าว่างจะชนะทุกวันที่ แล้วเด้งขึ้นไปเป็นจุดที่ 1 ของทริป)
+function sortCheckpoints(list){
+  return [...(list||[])].sort((a,b)=>{
+    const da = a.date || '', db = b.date || '';
+    if(!da && !db) return 0;
+    if(!da) return 1;
+    if(!db) return -1;
+    return da.localeCompare(db);
+  });
+}
+
 let flashTimer = null;
 function flashInfo(msg){
   // แบนเนอร์ "โหลดข้อมูลไม่สำเร็จ" สำคัญกว่า ห้ามโดนข้อความชั่วคราวทับ
@@ -150,15 +216,38 @@ async function calcOSRMRoute(a, b){
 // Geocodes a checkpoint once and caches lat/lon on it, so repeated lookups
 // (leg distance calc, route map) don't re-hit Nominatim for the same place.
 async function geocodeCheckpoint(c){
-  if(c.lat!=null && c.lon!=null) return {lat:c.lat, lon:c.lon};
-  const geo = await geocodePlace(`${c.name}, ${c.province}, Thailand`) || await geocodePlace(`${c.province}, Thailand`);
+  if(c.lat!=null && c.lon!=null) return {lat:c.lat, lon:c.lon, approx: !!c.geoApprox};
+  // หาด้วยชื่อสถานที่จริงก่อน ถ้าไม่เจอค่อยถอยไปใช้จุดกลางจังหวัด
+  // กรณีถอย ต้องติดธงไว้ให้ผู้ใช้รู้ว่าหมุดนี้ไม่ใช่ตำแหน่งจริงของสถานที่
+  let geo = await geocodePlace(`${c.name}, ${c.province}, Thailand`);
+  let approx = false;
+  if(!geo && c.province){
+    geo = await geocodePlace(`${c.province}, Thailand`);
+    approx = !!geo;
+  }
   if(!geo) return null;
   c.lat = geo.lat; c.lon = geo.lon;
+  if(approx) c.geoApprox = true; else delete c.geoApprox;
   await sleep(1100); // respect Nominatim's 1 req/sec usage policy
-  return geo;
+  return { lat: geo.lat, lon: geo.lon, approx };
 }
 
 const STORAGE_KEY = 'roadtrip-data-v1';
+// ที่เก็บงานที่แก้ไว้ตอนต่อคลาวด์ไม่ได้ เพื่อไม่ให้หายเงียบๆ เมื่อคลาวด์กลับมา
+const OFFLINE_KEY = 'roadtrip-offline-edits-v1';
+
+function checkOfflineBackup(){
+  try{
+    const raw = localStorage.getItem(OFFLINE_KEY);
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(parsed && Array.isArray(parsed.trips) && parsed.trips.length){
+      state.offlineBackup = { savedAt: parsed.savedAt || null, trips: parsed.trips };
+    } else {
+      localStorage.removeItem(OFFLINE_KEY);
+    }
+  }catch(e){ /* ไม่มีหรืออ่านไม่ได้ ก็ข้ามไป */ }
+}
 
 // Supabase — enables multi-user login + cross-device sync when reachable.
 // Falls back automatically to the existing cloud/local storage system if
@@ -175,16 +264,23 @@ try{
 async function loadDataFromSupabase(){
   if(!supabaseClient || !state.authUser) return;
   try{
-    const { data, error } = await supabaseClient.from('user_data').select('data').eq('id', state.authUser.id).maybeSingle();
+    const { data, error } = await supabaseClient.from('user_data').select('data, updated_at').eq('id', state.authUser.id).maybeSingle();
     if(error) throw error;
-    if(data && data.data){
-      state.trips = data.data.trips || [];
+    if(data){
+      state.trips = normalizeTrips(data.data && data.data.trips);
+      // จำเวอร์ชันที่โหลดมา ไว้เทียบตอนบันทึกว่ามีเครื่องอื่นแก้แทรกหรือเปล่า
+      state.remoteVersion = data.updated_at || null;
     } else {
+      const stamp = new Date().toISOString();
       state.trips = [];
-      await supabaseClient.from('user_data').insert({ id: state.authUser.id, data: {trips: []} });
+      const ins = await supabaseClient.from('user_data').insert({ id: state.authUser.id, data: {trips: []}, updated_at: stamp });
+      if(ins.error) throw ins.error;
+      state.remoteVersion = stamp;
     }
     // โหลดสำเร็จแล้ว ปลดล็อกการบันทึกอีกครั้ง
     state.loadFailed = false;
+    state.conflict = false;
+    checkOfflineBackup();
   }catch(e){
     console.error('load from supabase failed', e);
     // สำคัญ: ห้ามบันทึกทับ ตราบใดที่ยังไม่รู้ว่าข้อมูลจริงบนคลาวด์คืออะไร
@@ -212,7 +308,7 @@ async function storageSet(key, value){
 async function loadData(){
   try{
     const r = await storageGet(STORAGE_KEY);
-    if(r && r.value){ const p = JSON.parse(r.value); state.trips = p.trips||[]; }
+    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); }
   }catch(e){ /* no data yet */ }
 }
 let saveInFlight = false;
@@ -222,13 +318,45 @@ let saveDebounceTimer = null;
 async function doSave(retrying){
   // ถ้าโหลดข้อมูลเข้ามาไม่สำเร็จ state.trips ในหน่วยความจำอาจไม่ใช่ข้อมูลจริง
   // การบันทึกตอนนี้จะกลายเป็นการล้างข้อมูลบนคลาวด์ทิ้ง
-  if(state.loadFailed){ saveDirty = false; return; }
+  if(state.loadFailed || state.conflict){ saveDirty = false; return; }
   try{
     if(state.useSupabase && state.authUser){
-      const { error } = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, data: {trips: state.trips}, updated_at: new Date().toISOString() });
+      const stamp = new Date().toISOString();
+      const payload = { data: {trips: state.trips}, updated_at: stamp };
+      let rows = null, error = null;
+      if(state.remoteVersion){
+        // เขียนทับได้ต่อเมื่อ updated_at บนคลาวด์ยังเป็นค่าเดิมที่เราโหลดมา
+        // ถ้าเครื่องอื่นบันทึกแทรกไปแล้ว จะไม่มีแถวไหนถูกอัปเดต = ตรวจเจอว่าชนกัน
+        const res = await supabaseClient.from('user_data').update(payload)
+          .eq('id', state.authUser.id).eq('updated_at', state.remoteVersion).select('updated_at');
+        rows = res.data; error = res.error;
+        if(!error && Array.isArray(rows) && rows.length===0){
+          const check = await supabaseClient.from('user_data').select('updated_at').eq('id', state.authUser.id).maybeSingle();
+          if(check.data){
+            state.conflict = true;
+            saveDirty = false;
+            state.toast = 'ข้อมูลบนคลาวด์ถูกแก้จากอุปกรณ์อื่นหลังจากเครื่องนี้เปิดอยู่ หยุดบันทึกไว้ก่อนเพื่อไม่ให้ทับกัน';
+            state.toastMode = 'conflict';
+            if(flashTimer) clearTimeout(flashTimer);
+            render();
+            return;
+          }
+          // ไม่มีแถวอยู่จริง (เพิ่งถูกลบ) ให้สร้างใหม่
+          const ins = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload });
+          error = ins.error;
+        }
+      } else {
+        const res = await supabaseClient.from('user_data').upsert({ id: state.authUser.id, ...payload });
+        error = res.error;
+      }
       if(error) throw error;
+      state.remoteVersion = stamp;
     } else {
       await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips}));
+      // อยู่ในโหมดสำรองเพราะต่อคลาวด์ไม่ได้: จดไว้ด้วยว่านี่คือของที่ยังไม่ได้ซิงก์
+      if(state.offlineMode){
+        try{ localStorage.setItem(OFFLINE_KEY, JSON.stringify({savedAt: new Date().toISOString(), trips: state.trips})); }catch(e){}
+      }
     }
     // เคลียร์เฉพาะ toast แจ้งเซฟพลาดเท่านั้น
     // ถ้าเคลียร์ทุกโหมด ข้อความเตือนจาก flashInfo() จะหายก่อนผู้ใช้ทันอ่าน
@@ -268,6 +396,67 @@ async function retrySave(){
 }
 
 function findTrip(id){ return state.trips.find(t=>t.id===id); }
+
+// ---- ทำความสะอาดข้อมูลก่อนเอาเข้าระบบ ----
+// ใช้ทั้งตอน import ไฟล์ และตอนโหลดจากคลาวด์/เครื่อง
+// เก็บคีย์แปลกๆ ที่ไม่รู้จักไว้ตามเดิม (กันข้อมูลหายจากไฟล์เวอร์ชันใหม่กว่า) แค่บังคับคีย์ที่แอปใช้ให้ถูกชนิด
+const VALID_STATUS = ['planning','ongoing','done'];
+function numOrNull(v){
+  if(v===''||v===null||v===undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function normalizeCheckpoint(raw){
+  const c = (raw && typeof raw==='object') ? raw : {};
+  return { ...c,
+    id: typeof c.id==='string' && c.id ? c.id : uid(),
+    name: typeof c.name==='string' ? c.name : '(ไม่มีชื่อ)',
+    province: ALL_PROVINCES.includes(c.province) ? c.province : '',
+    date: typeof c.date==='string' ? c.date : '',
+    visited: !!c.visited,
+    parkKey: typeof c.parkKey==='string' ? c.parkKey : null,
+    lat: numOrNull(c.lat), lon: numOrNull(c.lon)
+  };
+}
+function normalizeExpense(raw){
+  const e = (raw && typeof raw==='object') ? raw : {};
+  return { ...e,
+    id: typeof e.id==='string' && e.id ? e.id : uid(),
+    category: EXPENSE_CATS.includes(e.category) ? e.category : EXPENSE_CATS[EXPENSE_CATS.length-1],
+    amount: Math.max(0, numOrNull(e.amount) || 0),
+    date: typeof e.date==='string' ? e.date : '',
+    note: typeof e.note==='string' ? e.note : ''
+  };
+}
+function normalizeTrip(raw, seenIds){
+  const t = (raw && typeof raw==='object') ? raw : {};
+  let id = typeof t.id==='string' && t.id ? t.id : uid();
+  if(seenIds){ while(seenIds.has(id)) id = uid(); seenIds.add(id); }
+  const v = (t.vehicle && typeof t.vehicle==='object') ? t.vehicle : {};
+  return { ...t,
+    id,
+    name: typeof t.name==='string' && t.name.trim() ? t.name : 'ทริปไม่มีชื่อ',
+    status: VALID_STATUS.includes(t.status) ? t.status : 'planning',
+    startDate: typeof t.startDate==='string' ? t.startDate : '',
+    endDate: typeof t.endDate==='string' ? t.endDate : '',
+    budget: numOrNull(t.budget),
+    categoryBudgets: (t.categoryBudgets && typeof t.categoryBudgets==='object') ? t.categoryBudgets : {},
+    checkpoints: Array.isArray(t.checkpoints) ? t.checkpoints.map(normalizeCheckpoint) : [],
+    expenses: Array.isArray(t.expenses) ? t.expenses.map(normalizeExpense) : [],
+    vehicle: { startOdo: numOrNull(v.startOdo), endOdo: numOrNull(v.endOdo), notes: typeof v.notes==='string'? v.notes : '' },
+    diaryText: typeof t.diaryText==='string' ? t.diaryText : '',
+    diaryMood: typeof t.diaryMood==='string' ? t.diaryMood : null,
+    diaryHighlightId: typeof t.diaryHighlightId==='string' ? t.diaryHighlightId : null,
+    routeStopIds: Array.isArray(t.routeStopIds) ? t.routeStopIds : undefined,
+    deleted: !!t.deleted || undefined,
+    deletedAt: numOrNull(t.deletedAt) || undefined
+  };
+}
+function normalizeTrips(list){
+  if(!Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.map(t=>normalizeTrip(t, seen));
+}
 function activeTrips(){ return state.trips.filter(t=>!t.deleted); }
 
 function provinceStats(){
@@ -301,7 +490,44 @@ function parkStats(){
 
 
 /* ---------- render ---------- */
+// ตัวห่อ: ถ้าวาดหน้าจอพังกลางทาง ห้ามปล่อยให้เป็นจอขาว
+// ผู้ใช้ต้องยังกดดาวน์โหลดข้อมูลสำรองออกมาได้เสมอ
 function render(){
+  try{
+    renderApp();
+  }catch(err){
+    console.error('render failed', err);
+    state.crash = (err && err.message) ? err.message : String(err);
+    try{ renderCrashScreen(); }catch(e2){ console.error('crash screen failed too', e2); }
+  }
+}
+
+function renderCrashScreen(){
+  const root = document.getElementById('root');
+  if(!root) return;
+  root.className = '';
+  let count = 0;
+  try{ count = (state.trips||[]).length; }catch(e){}
+  root.innerHTML = `
+    <div style="max-width:440px;margin:0 auto;padding:40px 22px;line-height:1.7;">
+      <div style="font-size:34px;text-align:center;margin-bottom:10px;">🌧️</div>
+      <h2 style="text-align:center;margin:0 0 10px;">หน้าจอแสดงผลขัดข้อง</h2>
+      <p class="faint" style="text-align:center;margin-top:0;">
+        ข้อมูลของคุณยังอยู่ครบ (${count} ทริป) แค่วาดหน้าจอไม่สำเร็จ
+        กดดาวน์โหลดข้อมูลสำรองเก็บไว้ก่อน แล้วค่อยลองโหลดหน้าใหม่นะครับ
+      </p>
+      <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.exportData()">⬇️ ดาวน์โหลดข้อมูลสำรอง</button>
+      <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="location.reload()">โหลดหน้าใหม่</button>
+      <details style="margin-top:18px;">
+        <summary class="faint" style="cursor:pointer;">รายละเอียดข้อผิดพลาด</summary>
+        <div class="faint" style="margin-top:8px;word-break:break-word;font-family:monospace;font-size:11px;">${esc(state.crash||'')}</div>
+      </details>
+    </div>
+  `;
+}
+
+function renderApp(){
+  pendingRender = false;
   const root = document.getElementById('root');
   root.className = '';
 
@@ -326,14 +552,31 @@ function render(){
 
   root.innerHTML = `
     ${state.toast ? (()=>{
-      const isError = state.toastMode==='save-error' || state.toastMode==='load-error';
+      const m = state.toastMode;
+      const isError = m==='save-error' || m==='load-error' || m==='conflict' || m==='offline';
       return `
       <div class="toast" style="${isError? '' : 'border-color:var(--olive);'}">
         <div class="msg">${isError?'⚠️':'ℹ️'} ${esc(state.toast)}</div>
-        ${state.toastMode==='save-error' ? `<button class="btn btn-primary btn-sm" onclick="app.retrySave()">ลองใหม่</button>` : ''}
-        ${state.toastMode==='load-error' ? `<button class="btn btn-primary btn-sm" onclick="location.reload()">โหลดหน้าใหม่</button>` : ''}
+        ${m==='save-error' ? `<button class="btn btn-primary btn-sm" onclick="app.retrySave()">ลองใหม่</button>` : ''}
+        ${m==='load-error' ? `<button class="btn btn-primary btn-sm" onclick="location.reload()">โหลดหน้าใหม่</button>` : ''}
+        ${m==='conflict' ? `
+          <button class="btn btn-primary btn-sm" onclick="app.resolveConflict('mine')">ใช้ของเครื่องนี้</button>
+          <button class="btn btn-ghost btn-sm" onclick="app.resolveConflict('theirs')">เอาของล่าสุด</button>
+        ` : ''}
+        ${m==='offline' ? `<button class="btn btn-ghost btn-sm" onclick="app.dismissToast()">รับทราบ</button>` : ''}
       </div>
     `;})() : ''}
+    ${state.offlineBackup ? `
+      <div class="card" style="border-color:var(--terracotta);margin-bottom:12px;">
+        <div style="font-weight:700;margin-bottom:6px;">📦 พบข้อมูลที่แก้ไว้ตอนออฟไลน์</div>
+        <div class="faint" style="line-height:1.6;margin-bottom:10px;">
+          มีข้อมูล ${state.offlineBackup.trips.length} ทริป ที่บันทึกลงเครื่องนี้ตอนต่อคลาวด์ไม่ได้${state.offlineBackup.savedAt? ' เมื่อ '+esc(fmtDateTime(state.offlineBackup.savedAt)) : ''}
+          ตอนนี้บนคลาวด์มี ${activeTrips().length} ทริป เลือกได้ว่าจะใช้ชุดไหน (แนะนำให้ Export เก็บไว้ก่อนตัดสินใจ)
+        </div>
+        <button class="btn btn-primary btn-full" onclick="app.useOfflineBackup()">ใช้ข้อมูลออฟไลน์ทับของบนคลาวด์</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:6px;" onclick="app.discardOfflineBackup()">ทิ้งข้อมูลออฟไลน์ ใช้ของบนคลาวด์</button>
+      </div>
+    ` : ''}
     ${state.tab!=='help' ? `<button class="help-fab" onclick="app.goTab('help')" aria-label="วิธีใช้">?</button>` : ''}
     <div class="app">
       <div class="content">${body}</div>
@@ -354,6 +597,9 @@ function render(){
 /* ---------- Trips list ---------- */
 function renderAuthScreen(){
   const isSignup = state.authMode==='signup';
+  const isReset = state.authMode==='reset';
+  const isNewPw = state.authMode==='newpassword';
+  const heading = isNewPw ? 'ตั้งรหัสผ่านใหม่' : isReset ? 'ลืมรหัสผ่าน' : isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ';
   return `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
       <div style="max-width:340px;width:100%;">
@@ -362,17 +608,40 @@ function renderAuthScreen(){
           <div class="eyebrow" style="justify-content:center;">- Somewhere After Rain -</div>
         </div>
         <div class="card">
-          <div style="font-weight:700;font-size:17px;margin-bottom:14px;text-align:center;">${isSignup?'สมัครสมาชิก':'เข้าสู่ระบบ'}</div>
+          <div style="font-weight:700;font-size:17px;margin-bottom:14px;text-align:center;">${heading}</div>
           ${state.authError ? `<div class="faint" style="color:var(--terracotta);margin-bottom:10px;text-align:center;">${esc(state.authError)}</div>` : ''}
-          <label>อีเมล</label>
-          <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email">
-          <label>รหัสผ่าน</label>
-          <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="${isSignup?'new-password':'current-password'}">
-          <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.submitAuth()" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังดำเนินการ...' : (isSignup?'สมัครสมาชิก':'เข้าสู่ระบบ')}</button>
-          <div class="faint" style="text-align:center;margin-top:14px;">
-            ${isSignup ? 'มีบัญชีอยู่แล้ว? ' : 'ยังไม่มีบัญชี? '}
-            <a href="#" onclick="app.toggleAuthMode();return false;" style="color:var(--olive);font-weight:600;text-decoration:none;">${isSignup?'เข้าสู่ระบบ':'สมัครสมาชิก'}</a>
-          </div>
+          ${state.authNotice ? `<div class="faint" style="color:var(--olive);margin-bottom:10px;text-align:center;line-height:1.6;">${esc(state.authNotice)}</div>` : ''}
+
+          ${isNewPw ? `
+            <div class="faint" style="margin-bottom:12px;line-height:1.6;">ตั้งรหัสผ่านใหม่ให้เรียบร้อยก่อนนะครับ ถ้าปิดหน้านี้ไปโดยไม่ตั้ง จะต้องขอลิงก์ใหม่อีกครั้ง</div>
+            <label>รหัสผ่านใหม่</label>
+            <input id="auth-newpassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password" enterkeyhint="go" onkeydown="app.authKey(event)">
+            <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.setNewPassword()" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังบันทึก...' : 'บันทึกรหัสผ่านใหม่'}</button>
+          ` : `
+            <label>อีเมล</label>
+            <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email" enterkeyhint="${isReset?'go':'next'}" onkeydown="app.authKey(event)">
+            ${isReset ? '' : `
+              <label>รหัสผ่าน</label>
+              <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="${isSignup?'new-password':'current-password'}" enterkeyhint="go" onkeydown="app.authKey(event)">
+            `}
+            <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="${isReset?'app.sendResetLink()':'app.submitAuth()'}" ${state.authBusy?'disabled':''}>${state.authBusy ? '⏳ กำลังดำเนินการ...' : (isReset?'ส่งลิงก์ตั้งรหัสใหม่':(isSignup?'สมัครสมาชิก':'เข้าสู่ระบบ'))}</button>
+          `}
+
+          ${isReset ? `
+            <div class="faint" style="text-align:center;margin-top:14px;">
+              <a href="#" onclick="app.setAuthMode('login');return false;" style="color:var(--olive);font-weight:600;text-decoration:none;">← กลับไปหน้าเข้าสู่ระบบ</a>
+            </div>
+          ` : isNewPw ? '' : `
+            ${isSignup ? '' : `
+              <div class="faint" style="text-align:center;margin-top:12px;">
+                <a href="#" onclick="app.setAuthMode('reset');return false;" style="color:var(--text-muted);text-decoration:none;">ลืมรหัสผ่าน?</a>
+              </div>
+            `}
+            <div class="faint" style="text-align:center;margin-top:${isSignup?'14':'8'}px;">
+              ${isSignup ? 'มีบัญชีอยู่แล้ว? ' : 'ยังไม่มีบัญชี? '}
+              <a href="#" onclick="app.toggleAuthMode();return false;" style="color:var(--olive);font-weight:600;text-decoration:none;">${isSignup?'เข้าสู่ระบบ':'สมัครสมาชิก'}</a>
+            </div>
+          `}
         </div>
       </div>
     </div>
@@ -467,7 +736,7 @@ function renderTripDetail(){
 
     <div class="stat-grid">
       <div class="stat-box"><div class="stat-num">${(t.checkpoints||[]).filter(c=>c.visited).length}</div><div class="stat-label">จุดแวะแล้ว</div></div>
-      <div class="stat-box"><div class="stat-num">${dist!=null?dist:'—'}</div><div class="stat-label">กม. ที่ขับจริง</div></div>
+      <div class="stat-box"><div class="stat-num">${dist!=null?money(dist):'—'}</div><div class="stat-label">กม. ที่ขับจริง</div></div>
       <div class="stat-box"><div class="stat-num">฿${money(spent)}</div><div class="stat-label">ใช้จ่ายแล้ว</div></div>
     </div>
 
@@ -511,7 +780,8 @@ function renderRouteMap(t, cps){
     `;
   }
 
-  const pts = cps.map(c=>({ ...projectLonLat(c.lon, c.lat), name:c.name }));
+  const pts = cps.map(c=>({ ...projectLonLat(c.lon, c.lat), name:c.name, approx: !!c.geoApprox }));
+  const approxNames = cps.filter(c=>c.geoApprox).map(c=>c.name);
   const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
   const pad = 22;
   let minX = Math.min(...xs)-pad, maxX = Math.max(...xs)+pad;
@@ -533,18 +803,19 @@ function renderRouteMap(t, cps){
           ${PROVINCE_PATHS.map(p=>`<path class="map-path ${routeProvinces.has(p.th)?'v1':''}" d="${p.d}"></path>`).join('')}
           <path d="${routeD}" fill="none" stroke="var(--olive)" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"></path>
           ${pts.map((p,i)=>`
-            <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="var(--olive)" stroke="var(--surface)" stroke-width="1.3"></circle>
+            <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="${p.approx?'var(--text-faint)':'var(--olive)'}" stroke="var(--surface)" stroke-width="1.3" ${p.approx?'stroke-dasharray="2 1.5"':''}></circle>
             <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="6" font-weight="700" fill="var(--surface)">${i+1}</text>
           `).join('')}
         </svg>
       </div>
       <div class="faint" style="margin-top:6px;">เส้นตรงระหว่างจุด ไม่อิงถนนจริง</div>
+      ${approxNames.length ? `<div class="faint" style="margin-top:6px;color:var(--terracotta);line-height:1.6;">📍 หมุดสีจางคือจุดที่หาพิกัดจากชื่อสถานที่ไม่เจอ ระบบใช้จุดกลางจังหวัดแทน (${esc(approxNames.join(', '))}) — ลองแก้ชื่อให้ตรงกับที่ใช้ในแผนที่แล้วกดคำนวณใหม่ ตำแหน่งจะแม่นขึ้น</div>` : ''}
     </div>
   `;
 }
 
 function renderStopsSub(t){
-  const cps = [...(t.checkpoints||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const cps = sortCheckpoints(t.checkpoints);
   let estTotalKm = 0, estTotalMin = 0, estCount = 0;
   cps.forEach((c,i)=>{
     if(i>0 && c.legFromId===cps[i-1].id && c.legDistanceKm!=null){
@@ -702,8 +973,10 @@ function renderBudgetSub(t, spent, pct, over){
 /* ---------- Dashboard ---------- */
 function renderDashboard(stats){
   const visitedProvinces = ALL_PROVINCES.filter(p=>stats[p].count>0);
-  const totalTrips = activeTrips().length;
-  const totalDist = activeTrips().reduce((s,t)=>{
+  // ใช้เกณฑ์เดียวกับแผนที่จังหวัด: ทริปที่ยังวางแผนอยู่ยังไม่ถือว่าเดินทางแล้ว
+  const travelledTrips = activeTrips().filter(t=>t.status!=='planning');
+  const totalTrips = travelledTrips.length;
+  const totalDist = travelledTrips.reduce((s,t)=>{
     const v = t.vehicle;
     if(v && v.startOdo!=null && v.endOdo!=null && v.endOdo>=v.startOdo) return s + (v.endOdo - v.startOdo);
     return s;
@@ -1173,6 +1446,7 @@ function parkOptionsHtml(province, selectedKey){
 
 function sheetCheckpoint(tripId, cpId){
   const t = findTrip(tripId);
+  if(!t) return `<h2 style="margin-top:0;">ไม่พบทริปนี้</h2><div class="faint">ทริปนี้อาจถูกลบไปแล้ว ลองปิดหน้านี้แล้วเปิดใหม่นะครับ</div>`;
   const cp = cpId ? (t.checkpoints||[]).find(c=>c.id===cpId) : null;
   return `
     <h2 style="margin-top:0;">${cp? 'แก้ไขจุดแวะ':'เพิ่มจุดแวะ'}</h2>
@@ -1287,9 +1561,9 @@ const app = {
     else state.expandedParkRegions = [...state.expandedParkRegions, name];
     render();
   },
-  openTrip(id){ state.activeTripId = id; state.tripSubtab='stops'; render(); },
-  openTripToBudget(id){ state.tab='trips'; state.activeTripId = id; state.tripSubtab='budget'; render(); },
-  openTripToStop(id){ state.tab='trips'; state.activeTripId = id; state.tripSubtab='stops'; render(); },
+  openTrip(id){ state.activeTripId = id; state.tripSubtab='stops'; render(); navPush(); },
+  openTripToBudget(id){ state.tab='trips'; state.activeTripId = id; state.tripSubtab='budget'; render(); navPush(); },
+  openTripToStop(id){ state.tab='trips'; state.activeTripId = id; state.tripSubtab='stops'; render(); navPush(); },
   async setDiaryMood(tripId, mood){
     const t = findTrip(tripId);
     if(t) t.diaryMood = (t.diaryMood===mood ? null : mood);
@@ -1308,19 +1582,21 @@ const app = {
   async updateDiaryText(tripId, val){
     const t = findTrip(tripId);
     if(t) t.diaryText = val;
-    render(); scheduleSave();
+    markPendingRender(); scheduleSave();
   },
-  closeTrip(){ state.activeTripId = null; render(); },
+  closeTrip(){ navBack(()=>{ state.activeTripId = null; render(); }); },
   setSubtab(s){ state.tripSubtab = s; render(); },
   openSheet(type, a, b){
     pendingVisited = null;
     if(type==='edit-cp'){
-      const t = findTrip(a); const cp = (t.checkpoints||[]).find(c=>c.id===b);
+      const t = findTrip(a); const cp = t ? (t.checkpoints||[]).find(c=>c.id===b) : null;
       if(cp){ pendingVisited = !!cp.visited; }
     }
+    const wasOpen = !!state.sheet;
     state.sheet = [type, a, b]; render();
+    if(!wasOpen) navPush();   // ซ้อน sheet ทับ sheet ไม่ต้อง push เพิ่มอีกชั้น
   },
-  closeSheet(){ state.sheet = null; render(); },
+  closeSheet(){ navBack(()=>{ state.sheet = null; render(); }); },
 
   async createTrip(){
     const name = document.getElementById('f-name').value.trim();
@@ -1378,24 +1654,27 @@ const app = {
       };
       t.checkpoints.push({id:uid(), ...data});
     }
-    state.sheet = null; render(); scheduleSave();
+    // ปิดผ่าน navBack เพื่อให้ประวัติของปุ่ม Back ไม่ค้างเกินจริง
+    scheduleSave(); navBack(()=>{ state.sheet = null; render(); });
   },
   deleteCheckpoint(tripId, cpId){
     askConfirm('ลบจุดแวะนี้ไหมครับ? กู้คืนไม่ได้', 'deleteCheckpoint', {tripId, cpId});
   },
   async setVisited(tripId, cpId, visited){
-    const t = findTrip(tripId); const c = t.checkpoints.find(x=>x.id===cpId);
+    const t = findTrip(tripId); if(!t) return;
+    const c = (t.checkpoints||[]).find(x=>x.id===cpId);
     if(c) c.visited = visited;
     render(); scheduleSave();
   },
 
   async updateVehicle(tripId, field, val){
-    const t = findTrip(tripId); t.vehicle = t.vehicle||{};
+    const t = findTrip(tripId); if(!t) return;
+    t.vehicle = t.vehicle||{};
     t.vehicle[field] = field==='notes'? val : (val===''? null : Math.max(0, Number(val)||0));
-    render(); scheduleSave();
+    markPendingRender(); scheduleSave();
   },
   async calcLegRoute(tripId, fromId, toId){
-    const t = findTrip(tripId);
+    const t = findTrip(tripId); if(!t) return;
     const cpFrom = (t.checkpoints||[]).find(c=>c.id===fromId);
     const cpTo = (t.checkpoints||[]).find(c=>c.id===toId);
     if(!cpFrom || !cpTo) return;
@@ -1417,8 +1696,8 @@ const app = {
     state.legLoading = null; render();
   },
   async calcTripRoute(tripId){
-    const t = findTrip(tripId);
-    const cps = [...(t.checkpoints||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const t = findTrip(tripId); if(!t) return;
+    const cps = sortCheckpoints(t.checkpoints);
     if(cps.length<2){ flashInfo('ต้องมีจุดแวะอย่างน้อย 2 จุดถึงจะวาดเส้นทางได้'); return; }
     state.routeMapLoading = tripId; state.routeMapError = null; render();
     try{
@@ -1435,21 +1714,25 @@ const app = {
     state.routeMapLoading = null; render();
   },
   async updateBudget(tripId, val){
-    const t = findTrip(tripId); t.budget = Math.max(0, Number(val)||0);
-    render(); scheduleSave();
+    const t = findTrip(tripId); if(!t) return;
+    t.budget = Math.max(0, Number(val)||0);
+    markPendingRender(); scheduleSave();
   },
   async updateCategoryBudget(tripId, category, val){
-    const t = findTrip(tripId); t.categoryBudgets = t.categoryBudgets || {};
+    const t = findTrip(tripId); if(!t) return;
+    t.categoryBudgets = t.categoryBudgets || {};
     t.categoryBudgets[category] = val===''? 0 : Math.max(0, Number(val)||0);
-    render(); scheduleSave();
+    markPendingRender(); scheduleSave();
   },
   async applyCategorySumToBudget(tripId){
-    const t = findTrip(tripId); const catBudgets = t.categoryBudgets || {};
+    const t = findTrip(tripId); if(!t) return;
+    const catBudgets = t.categoryBudgets || {};
     t.budget = EXPENSE_CATS.reduce((s,c)=>s+Number(catBudgets[c]||0),0);
     render(); scheduleSave();
   },
   async saveExpense(tripId){
     const t = findTrip(tripId);
+    if(!t){ flashInfo('ไม่พบทริปนี้แล้ว อาจถูกลบไประหว่างทาง'); return; }
     const amount = Number(document.getElementById('f-examt').value)||0;
     if(amount<=0){ flashInfo('กรอกจำนวนเงินก่อนนะครับ'); return; }
     const date = document.getElementById('f-exdate').value;
@@ -1464,7 +1747,8 @@ const app = {
       date,
       note: document.getElementById('f-exnote').value.trim()
     });
-    state.sheet = null; render(); scheduleSave();
+    // ปิดผ่าน navBack เพื่อให้ประวัติของปุ่ม Back ไม่ค้างเกินจริง
+    scheduleSave(); navBack(()=>{ state.sheet = null; render(); });
   },
   deleteExpense(tripId, expId){
     askConfirm('ลบรายการค่าใช้จ่ายนี้ไหมครับ? กู้คืนไม่ได้', 'deleteExpense', {tripId, expId});
@@ -1492,14 +1776,14 @@ const app = {
     } else if(c.type==='permaDelete'){
       state.trips = state.trips.filter(x=>x.id!==c.payload.id);
     } else if(c.type==='importData'){
-      state.trips = c.payload.data.trips || [];
+      state.trips = normalizeTrips(c.payload.data.trips);
       flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ');
     } else if(c.type==='deleteCheckpoint'){
       const t = findTrip(c.payload.tripId);
-      if(t) t.checkpoints = t.checkpoints.filter(x=>x.id!==c.payload.cpId);
+      if(t) t.checkpoints = (t.checkpoints||[]).filter(x=>x.id!==c.payload.cpId);
     } else if(c.type==='deleteExpense'){
       const t = findTrip(c.payload.tripId);
-      if(t) t.expenses = t.expenses.filter(x=>x.id!==c.payload.expId);
+      if(t) t.expenses = (t.expenses||[]).filter(x=>x.id!==c.payload.expId);
     }
     render(); scheduleSave();
   },
@@ -1534,12 +1818,107 @@ const app = {
     }
   },
 
+  dismissToast(){ state.toast = null; state.toastMode = 'info'; render(); },
+  // ข้อมูลชนกันข้ามอุปกรณ์: ให้ผู้ใช้เลือกเอง ไม่ตัดสินใจทับให้เงียบๆ
+  async resolveConflict(which){
+    if(which === 'theirs'){
+      state.conflict = false;
+      state.toast = null; state.toastMode = 'info';
+      state.remoteVersion = null;
+      await loadDataFromSupabase();
+      flashInfo('โหลดข้อมูลล่าสุดจากคลาวด์มาแล้วครับ');
+      render();
+      return;
+    }
+    // 'mine' = ยืนยันทับด้วยของเครื่องนี้ ต้องรู้เวอร์ชันล่าสุดก่อนถึงจะเขียนผ่านเงื่อนไขได้
+    try{
+      const { data } = await supabaseClient.from('user_data').select('updated_at').eq('id', state.authUser.id).maybeSingle();
+      state.remoteVersion = data ? (data.updated_at || null) : null;
+    }catch(e){ state.remoteVersion = null; }
+    state.conflict = false;
+    state.toast = null; state.toastMode = 'info';
+    render();
+    await triggerSaveNow();
+    flashInfo('บันทึกข้อมูลของเครื่องนี้ทับเรียบร้อยแล้วครับ');
+  },
+  async useOfflineBackup(){
+    const backup = state.offlineBackup;
+    if(!backup) return;
+    state.trips = normalizeTrips(backup.trips);
+    state.offlineBackup = null;
+    try{ localStorage.removeItem(OFFLINE_KEY); }catch(e){}
+    render();
+    await triggerSaveNow();
+    flashInfo('นำข้อมูลที่แก้ไว้ตอนออฟไลน์ขึ้นคลาวด์เรียบร้อยแล้วครับ');
+  },
+  discardOfflineBackup(){
+    state.offlineBackup = null;
+    try{ localStorage.removeItem(OFFLINE_KEY); }catch(e){}
+    flashInfo('ทิ้งข้อมูลออฟไลน์แล้ว ใช้ข้อมูลบนคลาวด์ต่อไปครับ');
+  },
   async retrySave(){ await retrySave(); },
 
   toggleAuthMode(){
     state.authMode = state.authMode==='signup' ? 'login' : 'signup';
     state.authError = null;
+    state.authNotice = null;
     render();
+  },
+  // กด Enter จากช่องใดก็ได้ = กดปุ่มหลักของหน้านั้น
+  authKey(e){
+    if(e.key !== 'Enter') return;
+    e.preventDefault();
+    if(state.authBusy) return;
+    if(state.authMode==='newpassword') this.setNewPassword();
+    else if(state.authMode==='reset') this.sendResetLink();
+    else this.submitAuth();
+  },
+  setAuthMode(mode){
+    state.authMode = mode; state.authError = null; state.authNotice = null; render();
+  },
+  // ปลายทางที่ให้ Supabase ส่งผู้ใช้กลับมาหลังกดลิงก์ในอีเมล
+  // ใช้ origin+pathname เพื่อให้ยังถูกต้องแม้เปลี่ยนชื่อ repo หรือย้ายโดเมนทีหลัง
+  appUrl(){
+    return window.location.origin + window.location.pathname;
+  },
+  async sendResetLink(){
+    const email = (document.getElementById('auth-email')||{}).value;
+    const mail = (email||'').trim();
+    if(!mail){ state.authError = 'กรอกอีเมลที่ใช้สมัครไว้ก่อนนะครับ'; render(); return; }
+    state.authError = null; state.authNotice = null; state.authBusy = true; render();
+    try{
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(mail, { redirectTo: this.appUrl() });
+      if(error) throw error;
+      state.authBusy = false;
+      state.authNotice = 'ส่งลิงก์ไปที่ ' + mail + ' แล้วครับ เปิดอีเมลแล้วกดลิงก์เพื่อตั้งรหัสใหม่ (ถ้าไม่เห็นในกล่องจดหมาย ลองดูในโฟลเดอร์สแปม) ลิงก์มีอายุจำกัด ถ้าหมดอายุกดขอใหม่ได้เลย';
+      render();
+    }catch(e){
+      state.authBusy = false;
+      state.authError = e.message || 'ส่งลิงก์ไม่สำเร็จ ลองใหม่อีกครั้ง';
+      render();
+    }
+  },
+  async setNewPassword(){
+    const el = document.getElementById('auth-newpassword');
+    const pw = el ? el.value : '';
+    if(!pw || pw.length < 6){ state.authError = 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร'; render(); return; }
+    state.authError = null; state.authBusy = true; render();
+    try{
+      const { error } = await supabaseClient.auth.updateUser({ password: pw });
+      if(error) throw error;
+      state.authBusy = false;
+      state.authMode = 'login';
+      state.authNotice = null;
+      flashInfo('ตั้งรหัสผ่านใหม่เรียบร้อยแล้วครับ');
+      await loadDataFromSupabase();
+      render();
+    }catch(e){
+      state.authBusy = false;
+      state.authError = (e.message||'').includes('expired')
+        ? 'ลิงก์นี้หมดอายุแล้ว กลับไปกดลืมรหัสผ่านเพื่อขอลิงก์ใหม่นะครับ'
+        : (e.message || 'บันทึกรหัสผ่านใหม่ไม่สำเร็จ ลองใหม่อีกครั้ง');
+      render();
+    }
   },
   async submitAuth(){
     const email = document.getElementById('auth-email').value.trim();
@@ -1584,7 +1963,28 @@ const app = {
 };
 window.app = app;
 
+// Supabase ส่งข้อผิดพลาดของลิงก์กลับมาทาง hash เช่น #error=...&error_description=...
+// อ่านแล้วล้าง hash ทิ้ง เพื่อไม่ให้ค้างใน URL เวลาผู้ใช้บุ๊กมาร์ก
+function readAuthLinkError(){
+  try{
+    const h = (window.location.hash || '').replace(/^#/, '');
+    if(!h || h.indexOf('error') < 0) return null;
+    const params = new URLSearchParams(h);
+    const code = params.get('error_code') || params.get('error') || '';
+    const desc = params.get('error_description') || '';
+    history.replaceState(null, '', window.location.origin + window.location.pathname);
+    if(/expired|invalid/i.test(code + ' ' + desc)){
+      return 'ลิงก์ตั้งรหัสผ่านนี้หมดอายุหรือถูกใช้ไปแล้ว กดลืมรหัสผ่านเพื่อขอลิงก์ใหม่ได้เลยครับ';
+    }
+    return desc.replace(/\+/g, ' ') || 'ลิงก์ใช้งานไม่ได้ ลองขอลิงก์ใหม่อีกครั้งนะครับ';
+  }catch(e){ return null; }
+}
+
 (async function init(){
+  initDeferredRender();
+  initHistoryNav();
+  const linkError = readAuthLinkError();
+  if(linkError){ state.authMode = 'reset'; state.authError = linkError; }
   if(supabaseClient){
     try{
       const sessionPromise = supabaseClient.auth.getSession();
@@ -1596,6 +1996,16 @@ window.app = app;
         const newUser = session ? session.user : null;
         const wasLoggedOut = !state.authUser;
         state.authUser = newUser;
+        // ผู้ใช้เพิ่งกดลิงก์รีเซ็ตจากอีเมล: Supabase ล็อกอินให้ชั่วคราวแล้ว
+        // ต้องพาไปหน้าตั้งรหัสใหม่ก่อน ไม่ใช่ปล่อยเข้าแอปเลย ไม่งั้นปิดแอปแล้วก็ยังเข้าไม่ได้เหมือนเดิม
+        if(event === 'PASSWORD_RECOVERY'){
+          state.authMode = 'newpassword';
+          state.authError = null;
+          state.authNotice = null;
+          state.authUser = null;   // ค้างที่หน้า auth จนกว่าจะตั้งรหัสใหม่เสร็จ
+          render();
+          return;
+        }
         if(newUser && wasLoggedOut){
           loadDataFromSupabase().then(render);
         } else {
@@ -1605,6 +2015,10 @@ window.app = app;
     }catch(e){
       console.warn('Supabase unreachable, falling back to built-in storage:', e.message);
       state.useSupabase = false;
+      // ตกมาโหมดเก็บในเครื่องแบบเงียบๆ ไม่ได้ ผู้ใช้ต้องรู้ว่าที่แก้ตอนนี้ยังไม่ขึ้นคลาวด์
+      state.offlineMode = true;
+      state.toast = 'ตอนนี้เชื่อมต่อระบบบัญชีไม่ได้ กำลังใช้ข้อมูลที่เก็บในเครื่องนี้ชั่วคราว — สิ่งที่แก้ตอนนี้จะยังไม่ซิงก์ขึ้นคลาวด์';
+      state.toastMode = 'offline';
     }
   }
   state.authLoading = false;
