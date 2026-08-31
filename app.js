@@ -428,6 +428,15 @@ function normalizeExpense(raw){
     note: typeof e.note==='string' ? e.note : ''
   };
 }
+// ยอด "ใช้จริง" เก็บเป็นตัวเลขรายหมวดตรงๆ ไม่ต้องบันทึกทีละรายการอีกแล้ว
+function tripActuals(t){
+  return (t && t.categoryActuals && typeof t.categoryActuals==='object') ? t.categoryActuals : {};
+}
+function tripSpent(t){
+  const a = tripActuals(t);
+  return EXPENSE_CATS.reduce((s,c)=>s+Number(a[c]||0), 0);
+}
+
 function normalizeTrip(raw, seenIds){
   const t = (raw && typeof raw==='object') ? raw : {};
   let id = typeof t.id==='string' && t.id ? t.id : uid();
@@ -441,6 +450,7 @@ function normalizeTrip(raw, seenIds){
     endDate: typeof t.endDate==='string' ? t.endDate : '',
     budget: numOrNull(t.budget),
     categoryBudgets: (t.categoryBudgets && typeof t.categoryBudgets==='object') ? t.categoryBudgets : {},
+    categoryActuals: buildActuals(t),
     checkpoints: Array.isArray(t.checkpoints) ? t.checkpoints.map(normalizeCheckpoint) : [],
     expenses: Array.isArray(t.expenses) ? t.expenses.map(normalizeExpense) : [],
     vehicle: { startOdo: numOrNull(v.startOdo), endOdo: numOrNull(v.endOdo), notes: typeof v.notes==='string'? v.notes : '' },
@@ -451,6 +461,27 @@ function normalizeTrip(raw, seenIds){
     deleted: !!t.deleted || undefined,
     deletedAt: numOrNull(t.deletedAt) || undefined
   };
+}
+// ทริปเก่าที่เคยบันทึกค่าใช้จ่ายเป็นรายการย่อย: รวมยอดตามหมวดให้อัตโนมัติครั้งเดียว
+// ตัวเลขที่เห็นจะเท่าเดิมทุกบาท แค่ย้ายมาแก้ตรงๆ ได้แล้ว
+function buildActuals(t){
+  const out = {};
+  if(t.categoryActuals && typeof t.categoryActuals==='object'){
+    EXPENSE_CATS.forEach(c=>{
+      const n = Number(t.categoryActuals[c]);
+      if(Number.isFinite(n) && n>0) out[c] = n;
+    });
+    return out;
+  }
+  if(Array.isArray(t.expenses)){
+    t.expenses.forEach(e=>{
+      if(!e || typeof e!=='object') return;
+      const cat = EXPENSE_CATS.includes(e.category) ? e.category : EXPENSE_CATS[EXPENSE_CATS.length-1];
+      const n = Number(e.amount);
+      if(Number.isFinite(n) && n>0) out[cat] = (out[cat]||0) + n;
+    });
+  }
+  return out;
 }
 function normalizeTrips(list){
   if(!Array.isArray(list)) return [];
@@ -687,7 +718,7 @@ function renderTripsList(){
         <div>กด + เพื่อเริ่มการเดินทาง</div>
       </div>
     ` : trips.map(t=>{
-      const spent = (t.expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+      const spent = tripSpent(t);
       const visitedCount = (t.checkpoints||[]).filter(c=>c.visited).length;
       const moodEmoji = t.diaryMood ? (MOODS.find(m=>m.v===t.diaryMood)?.e||'') : '';
       return `
@@ -714,7 +745,7 @@ function renderTripsList(){
 function renderTripDetail(){
   const t = findTrip(state.activeTripId);
   if(!t){ state.activeTripId=null; return renderTripsList(); }
-  const spent = (t.expenses||[]).reduce((s,e)=>s+Number(e.amount||0),0);
+  const spent = tripSpent(t);
   const pct = t.budget>0 ? Math.min(100, Math.round(spent/t.budget*100)) : 0;
   const over = t.budget>0 && spent > t.budget;
   const dist = (t.vehicle && t.vehicle.startOdo!=null && t.vehicle.endOdo!=null && t.vehicle.endOdo>=t.vehicle.startOdo) ? (t.vehicle.endOdo - t.vehicle.startOdo) : null;
@@ -846,7 +877,6 @@ function renderStopsSub(t){
             </div>
 
             <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-ghost btn-sm" onclick="app.openSheet('new-expense','${t.id}','${encodeURIComponent(c.name)}')">💰 ค่าใช้จ่าย</button>
               <button class="btn btn-ghost btn-sm" onclick="app.openSheet('edit-cp','${t.id}','${c.id}')">แก้ไขชื่อ/จังหวัด/วันที่</button>
               <button class="btn btn-ghost btn-sm" onclick="app.deleteCheckpoint('${t.id}','${c.id}')">ลบ</button>
             </div>
@@ -906,8 +936,7 @@ function renderVehicleSub(t, dist){
 
 function renderBudgetSub(t, spent, pct, over){
   const exps = [...(t.expenses||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const byCategory = {};
-  exps.forEach(e=>{ byCategory[e.category] = (byCategory[e.category]||0) + Number(e.amount||0); });
+  const byCategory = tripActuals(t);
   const catBudgets = t.categoryBudgets || {};
   const catSum = EXPENSE_CATS.reduce((s,c)=>s+Number(catBudgets[c]||0),0);
   const unallocated = t.budget>0 ? (t.budget - catSum) : null;
@@ -916,10 +945,13 @@ function renderBudgetSub(t, spent, pct, over){
       <label>งบประมาณรวมที่ตั้งไว้ (บาท)</label>
       <input type="number" inputmode="numeric" min="0" value="${t.budget??''}" onchange="app.updateBudget('${t.id}',this.value)">
       ${t.budget>0 ? `
-        <div class="row" style="margin-top:12px;"><div class="muted">ใช้ไปแล้ว ฿${money(spent)}</div><div class="muted">${pct}%</div></div>
+        <div class="row" style="margin-top:12px;">
+          <div class="muted">ใช้ไปแล้ว ฿${money(spent)}</div>
+          <div class="muted" style="${over?'color:var(--terracotta);':''}">${over? 'เกิน ฿'+money(spent-t.budget) : 'เหลือ ฿'+money(t.budget-spent)} · ${pct}%</div>
+        </div>
         <div class="bar-track"><div class="bar-fill ${over?'over':''}" style="width:${pct}%;"></div></div>
         ${over? `<div class="faint" style="color:var(--terracotta);margin-top:6px;">เกินงบไปแล้ว ฿${money(spent-t.budget)}</div>` : ''}
-      ` : ''}
+      ` : `<div class="faint" style="margin-top:8px;">ยังไม่ได้ตั้งงบรวม — ใส่ตัวเลขด้านบน หรือจะตั้งเป็นรายหมวดข้างล่างแทนก็ได้</div>`}
       ${catSum>0 ? `
         <div class="row" style="margin-top:12px;"><div class="faint">จัดสรรตามหมวดแล้ว ฿${money(catSum)}</div>
           ${unallocated!=null ? `<div class="faint" style="${unallocated<0?'color:var(--terracotta);':''}">${unallocated>=0? 'เหลือยังไม่จัดสรร ฿'+money(unallocated) : 'จัดสรรเกินงบรวม ฿'+money(-unallocated)}</div>` : ''}
@@ -935,38 +967,46 @@ function renderBudgetSub(t, spent, pct, over){
         const spentC = Number(byCategory[c]||0);
         const p = budget>0? Math.min(100, Math.round(spentC/budget*100)) : 0;
         const o = budget>0 && spentC>budget;
+        const left = budget - spentC;
         return `
-          <div style="padding:${i===0?'0':'12px'} 0 12px;${i>0?'border-top:1px solid var(--border);':''}">
+          <div style="padding:12px 0;${i>0?'border-top:1px solid var(--border);':''}">
             <div class="row">
-              <div style="font-size:13.5px;">${c}</div>
-              <input type="number" inputmode="numeric" min="0" style="width:104px;text-align:right;padding:7px 9px;" placeholder="0" value="${catBudgets[c]??''}" onchange="app.updateCategoryBudget('${t.id}','${c}',this.value)">
+              <div style="font-size:13.5px;font-weight:600;">${c}</div>
+              ${budget>0? `<div class="faint" style="${o?'color:var(--terracotta);':''}">${p}%</div>` : ''}
             </div>
-            <div class="row" style="margin-top:6px;">
-              <div class="faint">ใช้ไปแล้ว ฿${money(spentC)}</div>
-              ${budget>0? `<div class="faint">${p}%</div>` : ''}
+            <div style="display:flex;gap:10px;margin-top:8px;">
+              <div style="flex:1;min-width:0;">
+                <div class="faint" style="margin-bottom:3px;">งบ (บาท)</div>
+                <input type="number" inputmode="numeric" min="0" style="width:100%;text-align:right;padding:8px 10px;" placeholder="0" value="${catBudgets[c]??''}" onchange="app.updateCategoryBudget('${t.id}','${c}',this.value)">
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div class="faint" style="margin-bottom:3px;">ใช้จริง (บาท)</div>
+                <input type="number" inputmode="numeric" min="0" style="width:100%;text-align:right;padding:8px 10px;" placeholder="0" value="${byCategory[c]??''}" onchange="app.updateCategoryActual('${t.id}','${c}',this.value)">
+              </div>
             </div>
-            ${budget>0? `<div class="bar-track" style="height:6px;"><div class="bar-fill ${o?'over':''}" style="width:${p}%;"></div></div>` : ''}
-            ${o? `<div class="faint" style="color:var(--terracotta);margin-top:4px;">เกินงบหมวดนี้ ฿${money(spentC-budget)}</div>`:''}
+            ${budget>0 ? `
+              <div class="faint" style="margin-top:6px;${o?'color:var(--terracotta);':''}">${o? 'เกินงบ ฿'+money(-left) : 'เหลือ ฿'+money(left)}</div>
+              <div class="bar-track" style="height:6px;"><div class="bar-fill ${o?'over':''}" style="width:${p}%;"></div></div>
+            ` : (spentC>0? `<div class="faint" style="margin-top:6px;">ยังไม่ได้ตั้งงบหมวดนี้</div>` : '')}
           </div>
         `;
       }).join('')}
     </div>
 
-    <div class="card">
-      ${exps.length===0? `<div class="faint" style="text-align:center;padding:10px;">ยังไม่มีรายการค่าใช้จ่าย</div>` :
-        exps.map(e=>`
-        <div class="cp-item">
-          <div class="row">
-            <div><div style="font-weight:600;">${esc(e.category)}</div><div class="faint">${fmtDate(e.date)}${e.note? ' · '+esc(e.note):''}</div></div>
-            <div class="row" style="gap:8px;">
+    ${exps.length>0 ? `
+      <details class="card">
+        <summary style="cursor:pointer;font-weight:700;">รายการค่าใช้จ่ายที่เคยบันทึกไว้ (${exps.length} รายการ)</summary>
+        <div class="faint" style="margin:8px 0 4px;line-height:1.6;">ยอดเหล่านี้ถูกรวมเป็นช่อง "ใช้จริง" ของแต่ละหมวดให้แล้ว เก็บไว้ให้ดูย้อนหลังเฉยๆ ถ้าจะแก้ตัวเลข แก้ที่ช่อง "ใช้จริง" ด้านบนได้เลย</div>
+        ${exps.map(e=>`
+          <div class="cp-item">
+            <div class="row">
+              <div><div style="font-weight:600;">${esc(e.category)}</div><div class="faint">${fmtDate(e.date)}${e.note? ' · '+esc(e.note):''}</div></div>
               <div style="font-weight:700;">฿${money(e.amount)}</div>
-              <button class="back-btn" style="font-size:15px;" onclick="app.deleteExpense('${t.id}','${e.id}')">✕</button>
             </div>
           </div>
-        </div>
-      `).join('')}
-    </div>
-    <button class="btn btn-primary btn-full" onclick="app.openSheet('new-expense','${t.id}')">+ เพิ่มค่าใช้จ่าย</button>
+        `).join('')}
+      </details>
+    ` : ''}
   `;
 }
 
@@ -1174,13 +1214,13 @@ function genericStamp(entry, visited, dateStr){
 
 function renderExpenseSummary(){
   const trips = activeTrips();
-  const totalSpent = trips.reduce((s,t)=> s + (t.expenses||[]).reduce((a,e)=>a+Number(e.amount||0),0), 0);
+  const totalSpent = trips.reduce((s,t)=> s + tripSpent(t), 0);
   const byCategory = {};
-  trips.forEach(t=> (t.expenses||[]).forEach(e=>{ byCategory[e.category] = (byCategory[e.category]||0) + Number(e.amount||0); }));
+  trips.forEach(t=>{ const a = tripActuals(t); EXPENSE_CATS.forEach(c=>{ if(a[c]) byCategory[c] = (byCategory[c]||0) + Number(a[c]); }); });
   const categoryEntries = EXPENSE_CATS.map(c=>({cat:c, amt:byCategory[c]||0})).filter(x=>x.amt>0).sort((a,b)=>b.amt-a.amt);
   const tripRows = [...trips].sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||'')).map(t=>({
     id:t.id, name:t.name,
-    spent: (t.expenses||[]).reduce((a,e)=>a+Number(e.amount||0),0)
+    spent: tripSpent(t)
   }));
 
   return `
@@ -1611,7 +1651,7 @@ const app = {
       startDate, endDate,
       budget: Math.max(0, Number(document.getElementById('f-budget').value)||0),
       status: 'planning',
-      vehicle: {}, expenses: [], checkpoints: []
+      vehicle: {}, expenses: [], categoryActuals: {}, checkpoints: []
     };
     state.trips.push(trip); state.sheet=null; state.activeTripId=trip.id;
     render(); scheduleSave();
@@ -1716,6 +1756,13 @@ const app = {
   async updateBudget(tripId, val){
     const t = findTrip(tripId); if(!t) return;
     t.budget = Math.max(0, Number(val)||0);
+    markPendingRender(); scheduleSave();
+  },
+  async updateCategoryActual(tripId, category, val){
+    const t = findTrip(tripId); if(!t) return;
+    t.categoryActuals = t.categoryActuals || {};
+    const n = val===''? 0 : Math.max(0, Number(val)||0);
+    if(n>0) t.categoryActuals[category] = n; else delete t.categoryActuals[category];
     markPendingRender(); scheduleSave();
   },
   async updateCategoryBudget(tripId, category, val){
