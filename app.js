@@ -1170,6 +1170,86 @@ function renderBudgetSub(t, spent, pct, over){
 
 /* ---------- Dashboard ---------- */
 /* ---------- Map (province + parks merged, switched by a toggle) ---------- */
+/* ---------- Badges (คำนวณจากสถิติที่มีอยู่แล้วทั้งหมด ไม่เก็บข้อมูลใหม่) ---------- */
+function computeBadges(stats, pstats){
+  const trips = activeTrips();
+  const regionsVisited = REGIONS.filter(r=> r.provinces.some(p=> stats[p] && stats[p].count>0)).length;
+  const provincesVisited = ALL_PROVINCES.filter(p=> stats[p] && stats[p].count>0).length;
+  const parksVisited = PARKS_DATA.filter(p=> pstats[p.key] && pstats[p.key].count>0).length;
+  const totalDist = trips.reduce((s,t)=>{
+    const v = t.vehicle;
+    if(v && v.startOdo!=null && v.endOdo!=null && v.endOdo>=v.startOdo) return s + (v.endOdo - v.startOdo);
+    return s;
+  }, 0);
+  // นับทริปที่ "เสร็จสิ้นแล้ว" ต่อปีปฏิทิน (อิงวันเริ่มทริป) เอาปีที่เยอะสุด
+  const tripsByYear = {};
+  trips.forEach(t=>{
+    if(t.status!=='done') return;
+    const y = (t.startDate||'').slice(0,4);
+    if(!y) return;
+    tripsByYear[y] = (tripsByYear[y]||0) + 1;
+  });
+  const maxTripsPerYear = Object.keys(tripsByYear).length ? Math.max(...Object.values(tripsByYear)) : 0;
+  const moodTripsCount = trips.filter(t=>t.diaryMood).length;
+
+  return [
+    { id:'regions', icon:'🗺️', name:'ไปครบ 6 ภาค', value: regionsVisited, total: REGIONS.length,
+      tiers:[{label:null, target:REGIONS.length}] },
+    { id:'provinces', icon:'🧭', name:'นักบุกเบิก', value: provincesVisited, total: ALL_PROVINCES.length,
+      tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+    { id:'parks', icon:'🏞️', name:'นักสะสมตราปั๊ม', value: parksVisited, total: PARKS_DATA.length,
+      tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+    { id:'distance', icon:'🚗', name:'ระยะทางสะสม', value: totalDist, unit:'กม.',
+      tiers:[{label:'ทองแดง',target:1000},{label:'เงิน',target:5000},{label:'ทอง',target:10000}] },
+    { id:'yearly', icon:'📅', name:'นักเดินทางขาประจำ', value: maxTripsPerYear, unit:'ทริป/ปี',
+      tiers:[{label:null, target:5}] },
+    { id:'mood', icon:'😍', name:'ขาบันทึกมู้ด', value: moodTripsCount, unit:'ทริป',
+      tiers:[{label:null, target:10}] },
+  ];
+}
+// ระดับที่ปลดล็อกแล้ว: -1 ยังไม่ปลด, 0/1/2 = ทองแดง/เงิน/ทอง (หรือระดับเดียวสำหรับเหรียญไม่มีขั้น)
+function badgeTierIndex(b){
+  let idx = -1;
+  b.tiers.forEach((t,i)=>{ if(b.value >= t.target) idx = i; });
+  return idx;
+}
+// ตราวงกลมเส้นหมึกแบบเดียวกับตราปั๊มอุทยาน — ใช้โทนสีไล่ระดับเดียวกับ v1/v2/v3
+// ที่มีอยู่แล้ว (sage → olive → olive-deep) แทนสีทองแดง/เงิน/ทองจริง ให้เข้าพาเลตเดิม
+function badgeStampSvg(b, tierIdx, size){
+  size = size||60;
+  const unlocked = tierIdx>=0;
+  const ringColor = !unlocked ? 'var(--border)' : tierIdx===2 ? 'var(--olive-deep)' : tierIdx===1 ? 'var(--olive)' : 'var(--sage)';
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="27" fill="var(--surface)" stroke="${ringColor}" stroke-width="2.5" ${!unlocked?'stroke-dasharray="4 3"':''}/>
+      <circle cx="30" cy="30" r="21" fill="none" stroke="${ringColor}" stroke-width="1" opacity="${unlocked?0.5:0.3}"/>
+      <text x="30" y="32" text-anchor="middle" dominant-baseline="central" font-size="26" ${!unlocked?'opacity="0.35"':''}>${unlocked ? b.icon : '🔒'}</text>
+    </svg>
+  `;
+}
+function renderBadgesBody(stats, pstats){
+  const badges = computeBadges(stats, pstats);
+  const unlockedCount = badges.filter(b=>badgeTierIndex(b)>=0).length;
+  return `
+    <div class="card" style="text-align:center;margin-bottom:16px;">
+      <div class="muted">ปลดแล้ว</div>
+      <div class="stat-num" style="font-size:28px;margin-top:2px;">${unlockedCount}<span style="font-size:14px;color:var(--text-faint);">/${badges.length}</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;">
+      ${badges.map(b=>{
+        const tierIdx = badgeTierIndex(b);
+        const unlocked = tierIdx>=0;
+        return `
+        <div style="text-align:center;cursor:pointer;" onclick="app.openSheet('badge','${b.id}')">
+          ${badgeStampSvg(b, tierIdx, 62)}
+          <div style="font-size:11px;font-weight:600;margin-top:6px;font-family:'Trirong',serif;line-height:1.3;color:${unlocked?'var(--olive-deep)':'var(--text-faint)'};">${b.name}</div>
+          <div class="faint" style="font-size:9px;margin-top:1px;">${b.tiers.length>1 ? (unlocked ? (b.tiers[tierIdx].label||'ปลดแล้ว') : `${money(b.value)}/${money(b.tiers[0].target)}`) : (unlocked?'ปลดแล้ว':`${money(b.value)}/${money(b.tiers[0].target)}`)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
 function renderMapTab(stats, pstats){
   const view = state.mapView || 'province';
   return `
@@ -1180,8 +1260,9 @@ function renderMapTab(stats, pstats){
     <div class="subtabs" style="margin-top:0;margin-bottom:12px;">
       <div class="subtab ${view==='province'?'on':''}" onclick="app.setMapView('province')">🗺️ จังหวัด</div>
       <div class="subtab ${view==='parks'?'on':''}" onclick="app.setMapView('parks')">🏞️ อุทยานฯ</div>
+      <div class="subtab ${view==='badges'?'on':''}" onclick="app.setMapView('badges')">🏅 รางวัล</div>
     </div>
-    ${view==='province' ? renderProvinceMapBody(stats) : renderParksMapBody(pstats)}
+    ${view==='province' ? renderProvinceMapBody(stats) : view==='parks' ? renderParksMapBody(pstats) : renderBadgesBody(stats, pstats)}
   `;
 }
 function renderProvinceMapBody(stats){
@@ -1554,9 +1635,10 @@ function renderHelp(){
     )}
 
     ${helpSection('🗺️','ดูภาพรวมการเที่ยว',
-      'แท็บ <b style="color:var(--text);">🗺️ แผนที่</b> มีปุ่มสลับด้านบน 2 มุมมอง:<br>'
+      'แท็บ <b style="color:var(--text);">🗺️ แผนที่</b> มีปุ่มสลับด้านบน 3 มุมมอง:<br>'
       + '① <b style="color:var(--text);">จังหวัด</b> — ไล่สีจังหวัดตามจำนวนสถานที่ที่ไปมาแล้วโดยอัตโนมัติ (คำนวณจากจุดแวะที่ติ๊กว่า "ไปแล้ว" เท่านั้น) แตะจังหวัดบนแผนที่เพื่อดูว่าไปที่ไหนบ้าง ทริปไหน ตอนไหน — สถานที่เดียวกันที่ไปซ้ำจะรวมเป็นแถวเดียวและนับเป็น 1 ที่ ด้านล่างแผนที่ยังมีรายชื่อจังหวัดแยกตามภาค กดชื่อภาคเพื่อขยาย/ย่อดูรายชื่อได้<br>'
       + '② <b style="color:var(--text);">อุทยานฯ</b> — ดูรายละเอียดในหัวข้อถัดไป<br>'
+      + '③ <b style="color:var(--text);">🏅 รางวัล</b> — เหรียญรางวัลที่คำนวณจากสถิติทั้งหมดที่มีอยู่แล้วอัตโนมัติ (ไม่ต้องกรอกอะไรเพิ่ม) แตะเหรียญไหนดูความคืบหน้าได้ว่าใกล้ได้เหรียญถัดไปแค่ไหน<br>'
       + '<b style="color:var(--text);">ข้อควรรู้:</b> จุดแวะในทริปที่สถานะยังเป็น "กำลังวางแผน" จะยังไม่นับขึ้นแผนที่ ต้องเปลี่ยนสถานะทริปเป็น "กำลังเดินทาง" หรือ "เสร็จสิ้นแล้ว" ก่อน'
     )}
 
@@ -1629,6 +1711,7 @@ function renderSheet(stats, pstats){
   else if(type==='province') inner = sheetProvince(decodeURIComponent(a), stats);
   else if(type==='park') inner = sheetPark(decodeURIComponent(a), pstats);
   else if(type==='province-parks') inner = sheetProvinceParks(decodeURIComponent(a), pstats);
+  else if(type==='badge') inner = sheetBadge(a, stats, pstats);
   else if(type==='trash') inner = sheetTrash();
 
   return `<div class="overlay" onclick="if(event.target===this) app.closeSheet()">
@@ -1742,6 +1825,33 @@ function trashedCheckpoints(){
   state.trips.forEach(t=> (t.checkpoints||[]).forEach(c=>{ if(c.deleted) out.push({...c, tripId:t.id, tripName:t.name}); }));
   return out.sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
 }
+function sheetBadge(id, stats, pstats){
+  const badges = computeBadges(stats, pstats);
+  const b = badges.find(x=>x.id===id);
+  if(!b) return `<div class="faint">ไม่พบข้อมูล</div>`;
+  const tierIdx = badgeTierIndex(b);
+  return `
+    <div style="text-align:center;margin-bottom:12px;">${badgeStampSvg(b, tierIdx, 120)}</div>
+    <h2 style="margin-top:0;text-align:center;">${b.name}</h2>
+    <div class="muted" style="text-align:center;margin-bottom:16px;">ตอนนี้ ${money(b.value)}${b.total?`/${money(b.total)}`:''}${b.unit?' '+b.unit:''}</div>
+    <div class="road-divider"></div>
+    ${b.tiers.map((t,i)=>{
+      const reached = b.value >= t.target;
+      const pct = Math.min(100, Math.round(b.value/t.target*100));
+      return `
+        <div style="padding:10px 0;${i>0?'border-top:1px solid var(--border);':''}">
+          <div class="row">
+            <div style="font-weight:600;">${t.label ? t.label : 'เป้าหมาย'} ${reached?'✅':''}</div>
+            <div class="faint">${money(Math.min(b.value,t.target))}/${money(t.target)}${b.unit?' '+b.unit:''}</div>
+          </div>
+          <div class="bar-track" style="height:6px;"><div class="bar-fill" style="width:${pct}%;"></div></div>
+          ${!reached ? `<div class="faint" style="margin-top:4px;">อีก ${money(t.target-b.value)}${b.unit?' '+b.unit:''} ถึงเหรียญนี้</div>` : ''}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
 function sheetTrash(){
   const trashed = state.trips.filter(t=>t.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
   const trashedCps = trashedCheckpoints();
