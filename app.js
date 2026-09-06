@@ -105,7 +105,7 @@ const MOODS = [
 ];
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
-let state = { trips: [], tab:'trips', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
+let state = { trips: [], tab:'trips', mapView:'province', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', dismissedHints:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
   remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -193,16 +193,23 @@ function initHistoryNav(){
   });
 }
 
-// จุดแวะเรียงตามวันที่ ส่วนจุดที่ยังไม่ใส่วันที่ให้ไปต่อท้าย
-// (ถ้าเทียบสตริงตรงๆ ค่าว่างจะชนะทุกวันที่ แล้วเด้งขึ้นไปเป็นจุดที่ 1 ของทริป)
+// จุดแวะเรียงตามลำดับที่ผู้ใช้ตั้งเอง (ปุ่ม ▲▼) ไม่ใช่วันที่แล้ว — เพราะบางทีไปจริง
+// ไม่ตรงลำดับที่วางแผนไว้ (เช่น วางแผน A→B→C แต่ไปจริง A→C→B) หรือหลายจุดวันที่ตรงกัน
+// ทริปเก่าที่ยังไม่มี order (สร้างก่อนฟีเจอร์นี้) จะได้ค่าเริ่มต้นจากวันที่ให้ครั้งเดียว
+// ตรงนี้เท่านั้น จากนั้นเลื่อนเองได้ตามใจ ไม่ถูกคำนวณจากวันที่ซ้ำอีก
 function sortCheckpoints(list){
-  return [...(list||[])].sort((a,b)=>{
-    const da = a.date || '', db = b.date || '';
-    if(!da && !db) return 0;
-    if(!da) return 1;
-    if(!db) return -1;
-    return da.localeCompare(db);
-  });
+  const cps = list||[];
+  if(cps.length && !cps.every(c=>c.order!=null)){
+    const byDate = [...cps].sort((a,b)=>{
+      const da = a.date || '', db = b.date || '';
+      if(!da && !db) return 0;
+      if(!da) return 1;
+      if(!db) return -1;
+      return da.localeCompare(db);
+    });
+    byDate.forEach((c,i)=>{ c.order = i; });
+  }
+  return [...cps].sort((a,b)=>(a.order??0)-(b.order??0));
 }
 
 let savePillTimer = null;
@@ -311,6 +318,7 @@ async function loadDataFromSupabase(){
     if(error) throw error;
     if(data){
       state.trips = normalizeTrips(data.data && data.data.trips);
+      state.dismissedHints = (data.data && Array.isArray(data.data.dismissedHints)) ? data.data.dismissedHints : [];
       // จำเวอร์ชันที่โหลดมา ไว้เทียบตอนบันทึกว่ามีเครื่องอื่นแก้แทรกหรือเปล่า
       state.remoteVersion = data.updated_at || null;
     } else {
@@ -352,7 +360,7 @@ async function storageSet(key, value){
 async function loadData(){
   try{
     const r = await storageGet(STORAGE_KEY);
-    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); purgeOldTrash(); }
+    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); state.dismissedHints = Array.isArray(p.dismissedHints)? p.dismissedHints : []; purgeOldTrash(); }
   }catch(e){ /* no data yet */ }
 }
 let saveInFlight = false;
@@ -366,7 +374,7 @@ async function doSave(retrying){
   try{
     if(state.useSupabase && state.authUser){
       const stamp = new Date().toISOString();
-      const payload = { data: {trips: state.trips}, updated_at: stamp };
+      const payload = { data: {trips: state.trips, dismissedHints: state.dismissedHints||[]}, updated_at: stamp };
       let rows = null, error = null;
       if(state.remoteVersion){
         // เขียนทับได้ต่อเมื่อ updated_at บนคลาวด์ยังเป็นค่าเดิมที่เราโหลดมา
@@ -398,7 +406,7 @@ async function doSave(retrying){
       // เผื่อว่าตารางมี trigger/default ที่เขียน updated_at ทับเอง ไม่งั้นรอบถัดไปจะแจ้งชนกันทั้งที่ไม่ได้ชน
       state.remoteVersion = (Array.isArray(rows) && rows[0] && rows[0].updated_at) ? rows[0].updated_at : stamp;
     } else {
-      await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips}));
+      await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips, dismissedHints: state.dismissedHints||[]}));
       // อยู่ในโหมดสำรองเพราะต่อคลาวด์ไม่ได้: จดไว้ด้วยว่านี่คือของที่ยังไม่ได้ซิงก์
       if(state.offlineMode){
         try{ localStorage.setItem(OFFLINE_KEY, JSON.stringify({savedAt: new Date().toISOString(), trips: state.trips})); }catch(e){}
@@ -463,7 +471,9 @@ function normalizeCheckpoint(raw){
     date: typeof c.date==='string' ? c.date : '',
     visited: !!c.visited,
     parkKey: typeof c.parkKey==='string' ? c.parkKey : null,
-    lat: numOrNull(c.lat), lon: numOrNull(c.lon)
+    lat: numOrNull(c.lat), lon: numOrNull(c.lon),
+    deleted: !!c.deleted || undefined,
+    deletedAt: numOrNull(c.deletedAt) || undefined
   };
 }
 function normalizeExpense(raw){
@@ -537,6 +547,10 @@ function normalizeTrips(list){
   return list.map(t=>normalizeTrip(t, seen));
 }
 function activeTrips(){ return state.trips.filter(t=>!t.deleted); }
+// จุดแวะใช้ soft-delete แบบเดียวกับทริป: ลบแล้วไม่หายทันที แค่ติดธง ให้ที่นี่ที่เดียว
+// เป็นจุดกรองออก — จอไหนอ่าน/รวมยอดจุดแวะควรอ่านผ่านตัวนี้แทนที่จะแตะ t.checkpoints ตรงๆ
+function activeCps(t){ return (t && t.checkpoints||[]).filter(c=>!c.deleted); }
+function isHintDismissed(id){ return (state.dismissedHints||[]).includes(id); }
 
 // ทริปในถังขยะเก็บไว้ 30 วันแล้วลบจริง ไม่งั้นค้างสะสมและถูกอัปขึ้นคลาวด์ทุกครั้งที่เซฟ
 const TRASH_KEEP_DAYS = 30;
@@ -552,7 +566,19 @@ function purgeOldTrash(){
     if(!t.deletedAt) return true;         // ไม่รู้วันลบ เก็บไว้ก่อน ปลอดภัยกว่า
     return trashDaysLeft(t) > 0;
   });
-  return before !== state.trips.length;
+  // จุดแวะที่ลบก็ใช้เกณฑ์เดียวกัน ล้างทิ้งเป็นรายทริปไป
+  let cpsChanged = false;
+  state.trips.forEach(t=>{
+    if(!Array.isArray(t.checkpoints)) return;
+    const n = t.checkpoints.length;
+    t.checkpoints = t.checkpoints.filter(c=>{
+      if(!c.deleted) return true;
+      if(!c.deletedAt) return true;
+      return trashDaysLeft(c) > 0;
+    });
+    if(t.checkpoints.length !== n) cpsChanged = true;
+  });
+  return before !== state.trips.length || cpsChanged;
 }
 
 // สถานที่เดียวกันที่บันทึกซ้ำในทริปเดียว วันเดียว = ไปครั้งเดียว
@@ -587,7 +613,7 @@ function provinceStats(){
   ALL_PROVINCES.forEach(p=> map[p] = {count:0, visitCount:0, visits:[], groups:[]});
   activeTrips().forEach(t=>{
     if(t.status === 'planning') return; // ทริปที่ยังวางแผนอยู่ ยังไม่นับว่าไปจริงบนแผนที่
-    (t.checkpoints||[]).forEach(c=>{
+    activeCps(t).forEach(c=>{
       if(c.visited && c.province && map[c.province]){
         map[c.province].visits.push({tripId:t.id, trip:t.name, date:c.date, name:c.name, place:placeIdentity(c)});
       }
@@ -606,7 +632,7 @@ function parkStats(){
   PARKS_DATA.forEach(p=> map[p.key] = {count:0, visits:[]});
   activeTrips().forEach(t=>{
     if(t.status === 'planning') return;
-    (t.checkpoints||[]).forEach(c=>{
+    activeCps(t).forEach(c=>{
       if(c.visited && c.parkKey && map[c.parkKey]){
         map[c.parkKey].visits.push({tripId:t.id, trip:t.name, date:c.date, name:c.name});
       }
@@ -676,10 +702,9 @@ function renderApp(){
   const pstats = parkStats();
   let body = '';
   if(state.tab==='trips'){ body = state.activeTripId ? renderTripDetail() : renderTripsList(); }
-  else if(state.tab==='dashboard'){ body = renderDashboard(stats); }
+  else if(state.tab==='dashboard'){ body = renderMapTab(stats, pstats); }
   else if(state.tab==='expenses'){ body = renderExpenseSummary(); }
   else if(state.tab==='diary'){ body = renderDiary(); }
-  else if(state.tab==='parks'){ body = renderParks(pstats); }
   else if(state.tab==='help'){ body = renderHelp(); }
 
   root.innerHTML = `
@@ -715,11 +740,10 @@ function renderApp(){
       <div class="content">${body}</div>
       ${state.tab==='trips' && !state.activeTripId ? `<button class="fab" onclick="app.openSheet('new-trip')">+</button>` : ''}
       <div class="bottomnav"><div class="bottomnav-inner">
-        <button class="navbtn ${state.tab==='trips'?'active':''}" onclick="app.goTab('trips')"><span class="ic">🧭</span>บันทึกเส้นทาง</button>
-        <button class="navbtn ${state.tab==='dashboard'?'active':''}" onclick="app.goTab('dashboard')"><span class="ic">🗺️</span>ประเทศไทย</button>
-        <button class="navbtn ${state.tab==='parks'?'active':''}" onclick="app.goTab('parks')"><span class="ic">🏞️</span>อุทยานฯ</button>
+        <button class="navbtn ${state.tab==='trips'?'active':''}" onclick="app.goTab('trips')"><span class="ic">🧭</span>บันทึก</button>
+        <button class="navbtn ${state.tab==='dashboard'?'active':''}" onclick="app.goTab('dashboard')"><span class="ic">🗺️</span>แผนที่</button>
         <button class="navbtn ${state.tab==='expenses'?'active':''}" onclick="app.goTab('expenses')"><span class="ic">🧾</span>ค่าใช้จ่าย</button>
-        <button class="navbtn ${state.tab==='diary'?'active':''}" onclick="app.goTab('diary')"><span class="ic">📔</span>พื้นที่ความทรงจำ</button>
+        <button class="navbtn ${state.tab==='diary'?'active':''}" onclick="app.goTab('diary')"><span class="ic">📔</span>ความทรงจำ</button>
       </div></div>
     </div>
     ${renderSheet(stats, pstats)}
@@ -795,12 +819,18 @@ function renderAuthScreen(){
 
 function renderTripsList(){
   const trips = [...activeTrips()].sort((a,b)=> (b.startDate||'').localeCompare(a.startDate||''));
+  const trashCount = state.trips.filter(t=>t.deleted).length + trashedCheckpoints().length;
   return `
     <div class="topbar" style="padding-left:0;padding-right:0;text-align:center;">
       <img src="${LOGO_HEADER_DATAURI}" alt="Somewhere After Rain" style="width:96px;height:96px;border-radius:50%;margin-bottom:8px;">
       <div class="eyebrow" style="justify-content:center;">- Somewhere After Rain -</div>
       <h1>บันทึกการเดินทาง</h1>
     </div>
+    ${trashCount>0 ? `
+      <div style="text-align:center;margin-bottom:14px;">
+        <button class="btn btn-ghost btn-sm" onclick="app.openSheet('trash')">🗑️ ถังขยะ มีของกู้คืนได้ ${trashCount} รายการ</button>
+      </div>
+    ` : ''}
     ${trips.length===0 ? `
       <div class="empty-state">
         <div class="big" style="display:flex;justify-content:center;">
@@ -833,7 +863,7 @@ function renderTripsList(){
       </div>
     ` : trips.map(t=>{
       const spent = tripSpent(t);
-      const visitedCount = (t.checkpoints||[]).filter(c=>c.visited).length;
+      const visitedCount = activeCps(t).filter(c=>c.visited).length;
       const moodEmoji = t.diaryMood ? (MOODS.find(m=>m.v===t.diaryMood)?.e||'') : '';
       return `
         <div class="card card-tap" onclick="app.openTrip('${t.id}')">
@@ -880,8 +910,8 @@ function renderTripDetail(){
     </div>
 
     <div class="stat-grid">
-      <div class="stat-box"><div class="stat-num">${(t.checkpoints||[]).filter(c=>c.visited).length}</div><div class="stat-label">จุดแวะแล้ว</div></div>
-      <div class="stat-box"><div class="stat-num">${dist!=null?money(dist):'—'}</div><div class="stat-label">กม. ที่ขับจริง</div></div>
+      <div class="stat-box"><div class="stat-num">${activeCps(t).filter(c=>c.visited).length}</div><div class="stat-label">จุดแวะแล้ว</div></div>
+      <div class="stat-box"><div class="stat-num">${dist!=null?money(dist):'—'}</div><div class="stat-label">กม. ที่ขับจริง<div style="font-size:9px;opacity:.7;margin-top:1px;">(จากเลขไมล์ ไม่ใช่ตัวประเมิน)</div></div></div>
       <div class="stat-box"><div class="stat-num">฿${money(spent)}</div><div class="stat-label">ใช้จ่ายแล้ว</div></div>
     </div>
 
@@ -895,7 +925,12 @@ function renderTripDetail(){
       <select onchange="app.setStatus('${t.id}', this.value)" style="margin-bottom:8px;">
         ${Object.keys(STATUS_LABEL).map(k=>`<option value="${k}" ${t.status===k?'selected':''}>สถานะ: ${STATUS_LABEL[k]}</option>`).join('')}
       </select>
-      ${t.status==='planning' ? `<div class="faint" style="margin-bottom:4px;">💡 จุดแวะที่ติ๊ก "ไปแล้ว" จะยังไม่ขึ้นบนแผนที่ไทย จนกว่าจะเปลี่ยนสถานะทริปเป็น "กำลังเดินทาง" หรือ "เสร็จสิ้นแล้ว"</div>` : ''}
+      ${(t.status==='planning' && !isHintDismissed('planning-map')) ? `
+        <div class="faint" style="margin-bottom:4px;display:flex;gap:8px;align-items:flex-start;">
+          <span style="flex:1;">💡 จุดแวะที่ติ๊ก "ไปแล้ว" จะยังไม่ขึ้นบนแผนที่ไทย จนกว่าจะเปลี่ยนสถานะทริปเป็น "กำลังเดินทาง" หรือ "เสร็จสิ้นแล้ว"</span>
+          <button onclick="app.dismissHint('planning-map')" style="background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:13px;padding:0;flex-shrink:0;" aria-label="ปิดคำแนะนำ">✕</button>
+        </div>
+      ` : ''}
     </div>
 
     ${sub}
@@ -960,7 +995,7 @@ function renderRouteMap(t, cps){
 }
 
 function renderStopsSub(t){
-  const cps = sortCheckpoints(t.checkpoints);
+  const cps = sortCheckpoints(activeCps(t));
   let estTotalKm = 0, estTotalMin = 0, estCount = 0;
   cps.forEach((c,i)=>{
     if(i>0 && c.legFromId===cps[i-1].id && c.legDistanceKm!=null){
@@ -981,6 +1016,10 @@ function renderStopsSub(t){
           <div class="cp-head">
             <span class="cp-dot ${c.visited?'visited':''}"></span>
             <span class="cp-title">${esc(c.name)}</span>
+            <div style="display:flex;gap:2px;flex-shrink:0;">
+              <button class="back-btn" style="font-size:15px;padding:2px 4px;${i===0?'opacity:.25;':''}" onclick="app.moveCheckpoint('${t.id}','${c.id}',-1)" aria-label="ย้ายขึ้นก่อนจุดก่อนหน้า" ${i===0?'disabled':''}>▲</button>
+              <button class="back-btn" style="font-size:15px;padding:2px 4px;${i===cps.length-1?'opacity:.25;':''}" onclick="app.moveCheckpoint('${t.id}','${c.id}',1)" aria-label="ย้ายลงหลังจุดถัดไป" ${i===cps.length-1?'disabled':''}>▼</button>
+            </div>
           </div>
           <div class="faint" style="margin:4px 0 8px 17px;">${esc(c.province)} · ${fmtDate(c.date)}</div>
 
@@ -1043,7 +1082,12 @@ function renderVehicleSub(t, dist){
       <div class="row"><div class="muted">ระยะทางรวม</div><div class="stat-num" style="font-size:18px;">${dist!=null? money(dist)+' กม.' : '—'}</div></div>
       <label>บันทึกเกี่ยวกับรถ (เช็คสภาพ, ปัญหาระหว่างทาง ฯลฯ)</label>
       <textarea onchange="app.updateVehicle('${t.id}','notes',this.value)">${esc(v.notes||'')}</textarea>
-      <div class="faint" style="margin-top:10px;">💡 อยากรู้ระยะทาง/เวลาโดยประมาณระหว่างจุดแวะ ดูได้ในแท็บ "จุดแวะ &amp; บันทึก"</div>
+      ${!isHintDismissed('vehicle-est-distance') ? `
+        <div class="faint" style="margin-top:10px;display:flex;gap:8px;align-items:flex-start;">
+          <span style="flex:1;">💡 อยากรู้ระยะทาง/เวลาโดยประมาณระหว่างจุดแวะ ดูได้ในแท็บ "จุดแวะ &amp; บันทึก"</span>
+          <button onclick="app.dismissHint('vehicle-est-distance')" style="background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:13px;padding:0;flex-shrink:0;" aria-label="ปิดคำแนะนำ">✕</button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -1125,7 +1169,22 @@ function renderBudgetSub(t, spent, pct, over){
 }
 
 /* ---------- Dashboard ---------- */
-function renderDashboard(stats){
+/* ---------- Map (province + parks merged, switched by a toggle) ---------- */
+function renderMapTab(stats, pstats){
+  const view = state.mapView || 'province';
+  return `
+    <div class="topbar" style="padding-left:0;padding-right:0;">
+      <div class="eyebrow">สำรวจการเดินทาง</div>
+      <h1>แผนที่</h1>
+    </div>
+    <div class="subtabs" style="margin-top:0;margin-bottom:12px;">
+      <div class="subtab ${view==='province'?'on':''}" onclick="app.setMapView('province')">🗺️ จังหวัด</div>
+      <div class="subtab ${view==='parks'?'on':''}" onclick="app.setMapView('parks')">🏞️ อุทยานฯ</div>
+    </div>
+    ${view==='province' ? renderProvinceMapBody(stats) : renderParksMapBody(pstats)}
+  `;
+}
+function renderProvinceMapBody(stats){
   const visitedProvinces = ALL_PROVINCES.filter(p=>stats[p].count>0);
   // ใช้เกณฑ์เดียวกับแผนที่จังหวัด: ทริปที่ยังวางแผนอยู่ยังไม่ถือว่าเดินทางแล้ว
   const travelledTrips = activeTrips().filter(t=>t.status!=='planning');
@@ -1137,11 +1196,6 @@ function renderDashboard(stats){
   },0);
 
   return `
-    <div class="topbar" style="padding-left:0;padding-right:0;">
-      <div class="eyebrow">สรุปการเดินทาง</div>
-      <h1>แผนที่ของฉัน</h1>
-    </div>
-
     <div class="map-wrap">
       <svg viewBox="0 0 ${MAP_VIEW.w} ${MAP_VIEW.h}" xmlns="http://www.w3.org/2000/svg">
         ${PROVINCE_PATHS.map(p=>{
@@ -1182,14 +1236,9 @@ function renderDashboard(stats){
 }
 
 /* ---------- National Parks ---------- */
-function renderParks(pstats){
+function renderParksMapBody(pstats){
   const visitedCount = PARKS_DATA.filter(p=>pstats[p.key].count>0).length;
   return `
-    <div class="topbar" style="padding-left:0;padding-right:0;">
-      <div class="eyebrow">สะสมตราปั๊ม</div>
-      <h1>อุทยานแห่งชาติ</h1>
-    </div>
-
     <div class="map-wrap">
       <svg viewBox="0 0 ${MAP_VIEW.w} ${MAP_VIEW.h}" xmlns="http://www.w3.org/2000/svg">
         ${PROVINCE_PATHS.map(p=>{
@@ -1416,7 +1465,7 @@ function renderDiary(){
 }
 
 function renderDiaryEntry(t){
-  const cps = t.checkpoints||[];
+  const cps = sortCheckpoints(activeCps(t));
   const highlightCp = t.diaryHighlightId ? cps.find(c=>c.id===t.diaryHighlightId) : null;
   const moodEditing = !t.diaryMood || state.diaryMoodEditingTripId === t.id;
   const selectedMood = t.diaryMood ? MOODS.find(m=>m.v===t.diaryMood) : null;
@@ -1481,14 +1530,15 @@ function renderHelp(){
     </div>
 
     ${helpSection('🧭','เริ่มต้นทริปใหม่',
-      'ไปที่แท็บ <b style="color:var(--text);">บันทึกเส้นทาง</b> แล้วกดปุ่ม + มุมล่างขวา ใส่ชื่อทริป วันที่เดินทาง และงบประมาณคร่าวๆ (ใส่ทีหลังก็ได้) กด "สร้างทริป" แล้วจะเข้าหน้ารายละเอียดทริปทันที'
+      'ไปที่แท็บ <b style="color:var(--text);">🧭 บันทึก</b> แล้วกดปุ่ม + มุมล่างขวา ใส่ชื่อทริป วันที่เดินทาง และงบประมาณคร่าวๆ (ใส่ทีหลังก็ได้) กด "สร้างทริป" แล้วจะเข้าหน้ารายละเอียดทริปทันที'
     )}
 
     ${helpSection('📍','เพิ่มจุดแวะ',
       'ในหน้ารายละเอียดทริป แท็บย่อย <b style="color:var(--text);">จุดแวะ &amp; บันทึก</b> ใช้ได้ 2 จังหวะ:<br>'
       + '① ก่อนเดินทาง — เพิ่มสถานที่ที่วางแผนจะไป ตั้งสถานะเป็น "วางแผนไว้"<br>'
       + '② ระหว่าง/หลังเดินทาง — กดปุ่ม "ไปแล้ว" ที่จุดนั้นได้เลย<br>'
-      + 'ส่วนความรู้สึกและบันทึกความทรงจำ ย้ายไปเขียนรวมทั้งทริปที่แท็บ <b style="color:var(--text);">พื้นที่ความทรงจำ</b> แทน (ไม่ได้แยกเขียนทีละจุดแวะแล้ว)<br>'
+      + 'ถ้าไปจริงไม่ตรงลำดับที่วางแผนไว้ (เช่น วางแผน A→B→C แต่ไปจริง A→C→B) กดปุ่ม <b style="color:var(--text);">▲ ▼</b> ที่มุมขวาของแต่ละจุดแวะ เพื่อสลับลำดับก่อน-หลังได้เลย ไม่ต้องลบแล้วเพิ่มใหม่<br>'
+      + 'ส่วนความรู้สึกและบันทึกความทรงจำ ย้ายไปเขียนรวมทั้งทริปที่แท็บ <b style="color:var(--text);">📔 ความทรงจำ</b> แทน (ไม่ได้แยกเขียนทีละจุดแวะแล้ว)<br>'
       + 'ถ้ามีจุดแวะตั้งแต่ 2 จุดขึ้นไป จะมีการ์ด <b style="color:var(--text);">"🧭 จาก [จุด A] → [จุด B]"</b> คั่นระหว่างแต่ละจุดโดยอัตโนมัติ กดปุ่ม "คำนวณระยะทาง &amp; เวลา" เพื่อดึงระยะทางถนนจริง (กม.) และเวลาขับโดยประมาณ (ชั่วโมง/นาที) มาให้ฟรี ไม่ต้องมี API key (ต้องมีอินเทอร์เน็ต)<br>'
       + 'ค่าใช้จ่ายไม่ต้องบันทึกทีละจุดแวะแล้ว ไปกรอกรวมทีเดียวที่แท็บย่อย <b style="color:var(--text);">งบประมาณ</b> โดยใส่เป็นตัวเลข "งบ" กับ "ใช้จริง" ของแต่ละหมวดตรงๆ<br>'
       + 'ช่อง <b style="color:var(--text);">"อยู่ในอุทยานแห่งชาติ/เขตอนุรักษ์ไหน"</b> จะกรองรายชื่อให้เหลือเฉพาะของจังหวัดที่เลือกไว้ด้านบนอัตโนมัติ (เลือกจังหวัดก่อน ลิสต์อุทยานจะสั้นลงเอง หาง่ายขึ้นเยอะ)<br>'
@@ -1500,17 +1550,19 @@ function renderHelp(){
     )}
 
     ${helpSection('💰','ตั้งงบ &amp; บันทึกค่าใช้จ่าย',
-      'แท็บย่อย <b style="color:var(--text);">งบประมาณ</b> ตั้งงบรวมที่ตั้งใจไว้ก่อนเดินทาง และยังตั้งงบแยกตามหมวด (น้ำมัน, ที่พัก, อาหาร ฯลฯ) ได้ด้วย งบแยกตามหมวดไม่จำเป็นต้องรวมเท่างบรวมเป๊ะๆ เผื่อเป็นเงินสำรองได้ (แอปจะโชว์ให้ว่าจัดสรรไปแล้วเท่าไหร่ เหลือเท่าไหร่) จากนั้นกด "+ เพิ่มค่าใช้จ่าย" ทุกครั้งที่จ่ายเงินจริงระหว่างทาง แอปจะโชว์แถบเทียบงบตั้ง vs ใช้จริงให้ทั้งภาพรวมและรายหมวดอัตโนมัติ'
+      'แท็บย่อย <b style="color:var(--text);">งบประมาณ</b> ตั้งงบรวมที่ตั้งใจไว้ก่อนเดินทาง และยังตั้งงบแยกตามหมวด (น้ำมัน, ที่พัก, อาหาร ฯลฯ) ได้ด้วย งบแยกตามหมวดไม่จำเป็นต้องรวมเท่างบรวมเป๊ะๆ เผื่อเป็นเงินสำรองได้ (แอปจะโชว์ให้ว่าจัดสรรไปแล้วเท่าไหร่ เหลือเท่าไหร่) แต่ละหมวดมีช่อง "งบ" กับ "ใช้จริง" ให้กรอกตัวเลขตรงๆ ไม่ต้องบันทึกทีละรายการ อัปเดตยอดเมื่อไหร่ก็แก้ในช่อง "ใช้จริง" ได้เลย แอปจะโชว์แถบเทียบงบตั้ง vs ใช้จริงให้ทั้งภาพรวมและรายหมวดอัตโนมัติ'
     )}
 
     ${helpSection('🗺️','ดูภาพรวมการเที่ยว',
-      'แท็บ <b style="color:var(--text);">ประเทศไทย</b> จะไล่สีจังหวัดตามจำนวนสถานที่ที่ไปมาแล้วโดยอัตโนมัติ (คำนวณจากจุดแวะที่ติ๊กว่า "ไปแล้ว" เท่านั้น) แตะจังหวัดบนแผนที่เพื่อดูว่าไปที่ไหนบ้าง ทริปไหน ตอนไหน — สถานที่เดียวกันที่ไปซ้ำจะรวมเป็นแถวเดียวและนับเป็น 1 ที่ ด้านล่างแผนที่ยังมีรายชื่อจังหวัดแยกตามภาค กดชื่อภาคเพื่อขยาย/ย่อดูรายชื่อได้<br>'
+      'แท็บ <b style="color:var(--text);">🗺️ แผนที่</b> มีปุ่มสลับด้านบน 2 มุมมอง:<br>'
+      + '① <b style="color:var(--text);">จังหวัด</b> — ไล่สีจังหวัดตามจำนวนสถานที่ที่ไปมาแล้วโดยอัตโนมัติ (คำนวณจากจุดแวะที่ติ๊กว่า "ไปแล้ว" เท่านั้น) แตะจังหวัดบนแผนที่เพื่อดูว่าไปที่ไหนบ้าง ทริปไหน ตอนไหน — สถานที่เดียวกันที่ไปซ้ำจะรวมเป็นแถวเดียวและนับเป็น 1 ที่ ด้านล่างแผนที่ยังมีรายชื่อจังหวัดแยกตามภาค กดชื่อภาคเพื่อขยาย/ย่อดูรายชื่อได้<br>'
+      + '② <b style="color:var(--text);">อุทยานฯ</b> — ดูรายละเอียดในหัวข้อถัดไป<br>'
       + '<b style="color:var(--text);">ข้อควรรู้:</b> จุดแวะในทริปที่สถานะยังเป็น "กำลังวางแผน" จะยังไม่นับขึ้นแผนที่ ต้องเปลี่ยนสถานะทริปเป็น "กำลังเดินทาง" หรือ "เสร็จสิ้นแล้ว" ก่อน'
     )}
 
     ${helpSection('🏞️','สะสมตราปั๊มอุทยานแห่งชาติ',
-      'ตอนเพิ่ม/แก้ไขจุดแวะ จะมีช่อง <b style="color:var(--text);">"อยู่ในอุทยานแห่งชาติ/เขตอนุรักษ์ไหน (ถ้ามี)"</b> เลือกได้ถ้าจุดแวะนั้นอยู่ในอุทยานฯ หรือเขตห้ามล่าสัตว์ป่า (รวม 236 ที่ทั่วประเทศ) จุดแวะที่ครอบคลุมหลายจังหวัด เช่น เขาใหญ่ จะแยกเป็นตัวเลือกละจังหวัด นับแยกกัน<br>'
-      + 'แท็บ <b style="color:var(--text);">อุทยานฯ</b> จะรวบรวมทุกที่ที่เคยติ๊กไว้ เป็นเหมือนสมุดสะสมตราปั๊ม ที่ยังไม่เคยไปจะขึ้น 🔒 ล็อกไว้ พอไปแล้วถึงจะปลดล็อกเห็นตราจริง (บางที่มีตราจริงวาดไว้เฉพาะ ที่เหลือใช้ตรากลางแบบอัตโนมัติ) กดที่อุทยานไหนก็ดูตราปั๊ม พร้อมประวัติว่าไปตอนไหนบ้าง'
+      'ตอนเพิ่ม/แก้ไขจุดแวะ จะมีช่อง <b style="color:var(--text);">"อยู่ในอุทยานแห่งชาติ/เขตอนุรักษ์ไหน (ถ้ามี)"</b> เลือกได้ถ้าจุดแวะนั้นอยู่ในอุทยานฯ หรือเขตห้ามล่าสัตว์ป่า (รวม 236 ที่ทั่วประเทศ) จุดแวะที่ครอบคลุมหลายจังหวัด เช่น เขาใหญ่ จะแยกเป็นตัวเลือกละจังหวัด นับแยกกัน เลือกไว้แล้วพอกดติ๊ก "ไปแล้ว" จะมีข้อความแจ้งทันทีว่าได้ตราปั๊มอะไร ไม่ต้องไปเดาทีหลัง<br>'
+      + 'มุมมอง <b style="color:var(--text);">อุทยานฯ</b> ในแท็บ 🗺️ แผนที่ จะรวบรวมทุกที่ที่เคยติ๊กไว้ เป็นเหมือนสมุดสะสมตราปั๊ม ที่ยังไม่เคยไปจะขึ้น 🔒 ล็อกไว้ พอไปแล้วถึงจะปลดล็อกเห็นตราจริง (บางที่มีตราจริงวาดไว้เฉพาะ ที่เหลือใช้ตรากลางแบบอัตโนมัติ) กดที่อุทยานไหนก็ดูตราปั๊ม พร้อมประวัติว่าไปตอนไหนบ้าง มีช่องค้นหาชื่ออุทยาน/จังหวัดด้านบนให้ด้วย ถ้าจำไม่ได้ว่าอยู่ภาคไหน'
     )}
 
     ${helpSection('🧾','สรุปค่าใช้จ่ายรวม',
@@ -1518,7 +1570,7 @@ function renderHelp(){
     )}
 
     ${helpSection('📔','เขียนไดอารี่ของทริป',
-      'แท็บ <b style="color:var(--text);">พื้นที่ความทรงจำ</b> รวมทุกทริปเป็นฟีดเดียว อ่านย้อนหลังได้รวดเดียวเหมือนเปิดสมุดบันทึก แต่ละทริปเขียนได้ 3 อย่าง: เลือก <b style="color:var(--text);">ความรู้สึกโดยรวม</b> ของทั้งทริป, เลือก <b style="color:var(--text);">โมเมนต์ที่ประทับใจที่สุด</b> จากจุดแวะที่มีอยู่แล้ว (กดแล้วกระโดดกลับไปดูจุดนั้นได้เลย), และ <b style="color:var(--text);">เขียนบันทึกอิสระ</b> สรุปความรู้สึกทั้งทริป — พิมพ์แล้วบันทึกอัตโนมัติเหมือนส่วนอื่นๆ ของแอป'
+      'แท็บ <b style="color:var(--text);">📔 ความทรงจำ</b> รวมทุกทริปเป็นฟีดเดียว อ่านย้อนหลังได้รวดเดียวเหมือนเปิดสมุดบันทึก แต่ละทริปเขียนได้ 3 อย่าง: เลือก <b style="color:var(--text);">ความรู้สึกโดยรวม</b> ของทั้งทริป, เลือก <b style="color:var(--text);">โมเมนต์ที่ประทับใจที่สุด</b> จากจุดแวะที่มีอยู่แล้ว (กดแล้วกระโดดกลับไปดูจุดนั้นได้เลย), และ <b style="color:var(--text);">เขียนบันทึกอิสระ</b> สรุปความรู้สึกทั้งทริป — พิมพ์แล้วบันทึกอัตโนมัติเหมือนส่วนอื่นๆ ของแอป'
     )}
 
     ${helpSection('👤','เข้าสู่ระบบ / บัญชีผู้ใช้',
@@ -1561,7 +1613,7 @@ function renderHelp(){
       <label>นำเข้าข้อมูลจากไฟล์ที่เคย Export ไว้ (Import)</label>
       <input type="file" accept="application/json" onchange="app.importData(event)">
       <div class="faint" style="margin-top:6px;">⚠️ การนำเข้าจะแทนที่ข้อมูลปัจจุบันทั้งหมด</div>
-      <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="app.openSheet('trash')">🗑️ ถังขยะ (${state.trips.filter(t=>t.deleted).length} ทริป)</button>
+      <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="app.openSheet('trash')">🗑️ ถังขยะ (${state.trips.filter(t=>t.deleted).length} ทริป, ${trashedCheckpoints().length} จุดแวะ)</button>
     </div>
   `;
 }
@@ -1603,6 +1655,15 @@ function sheetNewTrip(){
   `;
 }
 
+// Grouped by ภาค (region) with <optgroup> — a flat 77-item list was painful
+// to scan on mobile, and parks already get this treatment via PARK_REGION_GROUPS.
+function provinceOptionsHtml(selectedProvince){
+  return `<option value="">เลือกจังหวัด</option>` + REGIONS.map(r=>`
+    <optgroup label="${r.name}">
+      ${r.provinces.map(p=>`<option value="${p}" ${selectedProvince===p?'selected':''}>${p}</option>`).join('')}
+    </optgroup>
+  `).join('');
+}
 function parkOptionsHtml(province, selectedKey){
   if(!province){
     // no province chosen yet - fall back to full list grouped by region
@@ -1622,15 +1683,14 @@ function parkOptionsHtml(province, selectedKey){
 function sheetCheckpoint(tripId, cpId){
   const t = findTrip(tripId);
   if(!t) return `<h2 style="margin-top:0;">ไม่พบทริปนี้</h2><div class="faint">ทริปนี้อาจถูกลบไปแล้ว ลองปิดหน้านี้แล้วเปิดใหม่นะครับ</div>`;
-  const cp = cpId ? (t.checkpoints||[]).find(c=>c.id===cpId) : null;
+  const cp = cpId ? activeCps(t).find(c=>c.id===cpId) : null;
   return `
     <h2 style="margin-top:0;">${cp? 'แก้ไขจุดแวะ':'เพิ่มจุดแวะ'}</h2>
     <label>ชื่อสถานที่</label>
     <input id="f-cpname" value="${cp?esc(cp.name):''}" placeholder="เช่น วัดร่องขุ่น">
     <label>จังหวัด</label>
     <select id="f-cpprovince" onchange="app.updateParkOptions()">
-      <option value="">เลือกจังหวัด</option>
-      ${ALL_PROVINCES.map(p=>`<option value="${p}" ${cp&&cp.province===p?'selected':''}>${p}</option>`).join('')}
+      ${provinceOptionsHtml(cp?cp.province:'')}
     </select>
     <label>อยู่ในอุทยานแห่งชาติ/เขตอนุรักษ์ไหน (ถ้ามี)</label>
     <select id="f-cppark">
@@ -1675,12 +1735,22 @@ function sheetProvince(p, stats){
   `;
 }
 
+// รวมจุดแวะที่ถูกลบไว้จากทุกทริป (รวมทริปที่ยังไม่ถูกลบด้วย) มาไว้ที่เดียว
+// ให้เหมือนกับที่ถังขยะทริปทำอยู่แล้ว
+function trashedCheckpoints(){
+  const out = [];
+  state.trips.forEach(t=> (t.checkpoints||[]).forEach(c=>{ if(c.deleted) out.push({...c, tripId:t.id, tripName:t.name}); }));
+  return out.sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+}
 function sheetTrash(){
   const trashed = state.trips.filter(t=>t.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+  const trashedCps = trashedCheckpoints();
   return `
     <h2 style="margin-top:0;">ถังขยะ</h2>
-    <div class="muted" style="margin-bottom:12px;">ทริปที่ลบจะอยู่ที่นี่ ${TRASH_KEEP_DAYS} วัน กู้คืนได้ตลอดในช่วงนั้น พ้นกำหนดแล้วระบบจะลบถาวรให้เอง</div>
-    ${trashed.length===0? `<div class="faint" style="text-align:center;padding:20px 0;">ไม่มีทริปในถังขยะ</div>` :
+    <div class="muted" style="margin-bottom:12px;">ลบอะไรไปก็มาอยู่ที่นี่ก่อน ${TRASH_KEEP_DAYS} วัน กู้คืนได้ตลอดในช่วงนั้น พ้นกำหนดแล้วระบบจะลบถาวรให้เอง</div>
+
+    <div class="faint" style="margin-bottom:6px;">ทริป (${trashed.length})</div>
+    ${trashed.length===0? `<div class="faint" style="padding:6px 0 16px;">ไม่มีทริปในถังขยะ</div>` :
       trashed.map(t=>`
         <div class="cp-item">
           <div style="font-weight:600;">${esc(t.name)}</div>
@@ -1689,6 +1759,22 @@ function sheetTrash(){
           <div style="margin-top:8px;display:flex;gap:8px;">
             <button class="btn btn-primary btn-sm" onclick="app.restoreTrip('${t.id}')">↩️ กู้คืน</button>
             <button class="btn btn-danger btn-sm" onclick="app.permanentlyDeleteTrip('${t.id}')">ลบถาวร</button>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    <div class="road-divider"></div>
+    <div class="faint" style="margin-bottom:6px;">จุดแวะ (${trashedCps.length})</div>
+    ${trashedCps.length===0? `<div class="faint" style="padding:6px 0 0;">ไม่มีจุดแวะในถังขยะ</div>` :
+      trashedCps.map(c=>`
+        <div class="cp-item">
+          <div style="font-weight:600;">${esc(c.name)}</div>
+          <div class="faint">${esc(c.tripName)} · ${esc(c.province||'')}${c.date?' · '+fmtDate(c.date):''}</div>
+          <div class="faint" style="margin-top:2px;${trashDaysLeft(c)<=7?'color:var(--terracotta);':''}">${c.deletedAt? `จะถูกลบถาวรอัตโนมัติในอีก ${trashDaysLeft(c)} วัน` : 'ไม่ทราบวันที่ลบ จะเก็บไว้จนกว่าจะลบเอง'}</div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="app.restoreCheckpoint('${c.tripId}','${c.id}')">↩️ กู้คืน</button>
+            <button class="btn btn-danger btn-sm" onclick="app.permanentlyDeleteCheckpoint('${c.tripId}','${c.id}')">ลบถาวร</button>
           </div>
         </div>
       `).join('')
@@ -1719,6 +1805,8 @@ let pendingVisited = null;
 
 const app = {
   goTab(tab){ state.tab = tab; state.activeTripId=null; render(); },
+  setMapView(view){ state.mapView = view; render(); },
+  dismissHint(id){ state.dismissedHints = [...(state.dismissedHints||[]), id]; render(); scheduleSave(); },
   toggleRegion(name){
     if(state.expandedRegions.includes(name)) state.expandedRegions = state.expandedRegions.filter(r=>r!==name);
     else state.expandedRegions = [...state.expandedRegions, name];
@@ -1772,7 +1860,7 @@ const app = {
   openSheet(type, a, b){
     pendingVisited = null;
     if(type==='edit-cp'){
-      const t = findTrip(a); const cp = t ? (t.checkpoints||[]).find(c=>c.id===b) : null;
+      const t = findTrip(a); const cp = t ? activeCps(t).find(c=>c.id===b) : null;
       if(cp){ pendingVisited = !!cp.visited; }
     }
     const wasOpen = !!state.sheet;
@@ -1822,7 +1910,7 @@ const app = {
 
     // กันเพิ่มจุดเดิมซ้ำโดยไม่ตั้งใจ ซึ่งเป็นเรื่องที่เกิดง่ายมากตอนกรอกหลายจุดรวดเดียว
     const newIdentity = placeIdentity({ name, parkKey });
-    const twin = t.checkpoints.find(c=> c.id !== cpId && placeIdentity(c) === newIdentity && c.province === province);
+    const twin = activeCps(t).find(c=> c.id !== cpId && placeIdentity(c) === newIdentity && c.province === province);
     if(twin){
       if((twin.date||'') === (date||'')){
         flashInfo('จุดนี้มีอยู่ในทริปแล้วในวันเดียวกัน ถ้าตั้งใจจะแวะสองรอบ ลองใส่วันที่ให้ต่างกันนะครับ');
@@ -1834,7 +1922,7 @@ const app = {
     if(cpId){
       // editing existing checkpoint: only name/province/date/park come from this form;
       // visited/mood/note are controlled inline in the stops list, so leave them untouched.
-      const cp = t.checkpoints.find(c=>c.id===cpId);
+      const cp = activeCps(t).find(c=>c.id===cpId);
       if(!cp){ flashInfo('ไม่พบจุดแวะนี้แล้ว อาจถูกลบไประหว่างทาง'); return; }
       const locationChanged = cp.name!==name || cp.province!==province;
       Object.assign(cp, { name, province, date, parkKey });
@@ -1844,8 +1932,10 @@ const app = {
         delete t.routeStopIds;
       }
     } else {
+      const maxOrder = Math.max(-1, ...(t.checkpoints||[]).map(c=>c.order??-1));
       const data = {
         name, province, date, parkKey,
+        order: maxOrder + 1,
         visited: pendingVisited===null? false : pendingVisited
       };
       t.checkpoints.push({id:uid(), ...data});
@@ -1854,13 +1944,43 @@ const app = {
     scheduleSave(); navBack(()=>{ state.sheet = null; render(); });
   },
   deleteCheckpoint(tripId, cpId){
-    askConfirm('ลบจุดแวะนี้ไหมครับ? กู้คืนไม่ได้', 'deleteCheckpoint', {tripId, cpId});
+    askConfirm(`ย้ายจุดแวะนี้ไปถังขยะไหมครับ? กู้คืนได้ภายใน ${TRASH_KEEP_DAYS} วันจากไอคอน "?" มุมบน > ถังขยะ`, 'trashCheckpoint', {tripId, cpId});
+  },
+  async restoreCheckpoint(tripId, cpId){
+    const t = findTrip(tripId); const c = t && (t.checkpoints||[]).find(x=>x.id===cpId);
+    if(c){
+      delete c.deleted; delete c.deletedAt;
+      // ไม่เคยมี order มาก่อน (กู้คืนของเก่าก่อนมีฟีเจอร์เลื่อนลำดับ) ให้ต่อท้ายลิสต์ปัจจุบัน
+      if(c.order==null){
+        const maxOrder = Math.max(-1, ...activeCps(t).filter(x=>x.id!==c.id).map(x=>x.order??-1));
+        c.order = maxOrder + 1;
+      }
+    }
+    render(); scheduleSave();
+  },
+  permanentlyDeleteCheckpoint(tripId, cpId){
+    askConfirm('ลบจุดแวะนี้ถาวรจริงๆ เลยไหมครับ? กู้คืนไม่ได้อีกแล้ว', 'permaDeleteCheckpoint', {tripId, cpId});
+  },
+  async moveCheckpoint(tripId, cpId, direction){
+    const t = findTrip(tripId); if(!t) return;
+    const ordered = sortCheckpoints(activeCps(t)); // ทำให้ทุกจุดมี order ก่อนสลับ
+    const idx = ordered.findIndex(c=>c.id===cpId);
+    const swapIdx = idx + direction;
+    if(idx<0 || swapIdx<0 || swapIdx>=ordered.length) return;
+    const a = ordered[idx], b = ordered[swapIdx];
+    const tmp = a.order; a.order = b.order; b.order = tmp;
+    render(); scheduleSave();
   },
   async setVisited(tripId, cpId, visited){
     const t = findTrip(tripId); if(!t) return;
-    const c = (t.checkpoints||[]).find(x=>x.id===cpId);
+    const c = activeCps(t).find(x=>x.id===cpId);
     if(c) c.visited = visited;
     render(); scheduleSave();
+    // ให้ฟีดแบ็กทันทีว่าได้ตราปั๊มแล้ว ไม่ต้องให้ผู้ใช้ไปสังเกตเองทีหลังในแท็บอุทยานฯ
+    if(visited && c && c.parkKey){
+      const park = PARKS_DATA.find(p=>p.key===c.parkKey);
+      if(park) flashInfo(`🏞️ ได้ตราปั๊ม "${park.name}" แล้ว! ไปดูได้ที่แท็บแผนที่ > อุทยานฯ`);
+    }
   },
 
   async updateVehicle(tripId, field, val){
@@ -1871,8 +1991,8 @@ const app = {
   },
   async calcLegRoute(tripId, fromId, toId){
     const t = findTrip(tripId); if(!t) return;
-    const cpFrom = (t.checkpoints||[]).find(c=>c.id===fromId);
-    const cpTo = (t.checkpoints||[]).find(c=>c.id===toId);
+    const cpFrom = activeCps(t).find(c=>c.id===fromId);
+    const cpTo = activeCps(t).find(c=>c.id===toId);
     if(!cpFrom || !cpTo) return;
     state.legLoading = toId; state.legErrorId = null; render();
     try{
@@ -1893,7 +2013,7 @@ const app = {
   },
   async calcTripRoute(tripId){
     const t = findTrip(tripId); if(!t) return;
-    const cps = sortCheckpoints(t.checkpoints);
+    const cps = sortCheckpoints(activeCps(t));
     if(cps.length<2){ flashInfo('ต้องมีจุดแวะอย่างน้อย 2 จุดถึงจะวาดเส้นทางได้'); return; }
     state.routeMapLoading = tripId; state.routeMapError = null; render();
     try{
@@ -1958,7 +2078,11 @@ const app = {
     } else if(c.type==='importData'){
       state.trips = normalizeTrips(c.payload.data.trips);
       flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ');
-} else if(c.type==='deleteCheckpoint'){
+} else if(c.type==='trashCheckpoint'){
+      const t = findTrip(c.payload.tripId);
+      const cp = t && (t.checkpoints||[]).find(x=>x.id===c.payload.cpId);
+      if(cp){ cp.deleted = true; cp.deletedAt = Date.now(); }
+    } else if(c.type==='permaDeleteCheckpoint'){
       const t = findTrip(c.payload.tripId);
       if(t) t.checkpoints = (t.checkpoints||[]).filter(x=>x.id!==c.payload.cpId);
         }
