@@ -105,7 +105,7 @@ const MOODS = [
 ];
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
-let state = { trips: [], tab:'trips', mapView:'province', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', dismissedHints:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
+let state = { trips: [], tab:'trips', mapView:'province', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, legLoading:null, legErrorId:null, diaryMoodEditingTripId:null, diaryExpandedIds:[], diaryEditModeIds:[], routeMapLoading:null, routeMapError:null, loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', dismissedHints:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
   remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1545,7 +1545,77 @@ function renderDiary(){
   `;
 }
 
+function hasDiaryContent(t){
+  return !!(t.diaryMood || t.diaryHighlightId || (t.diaryText && t.diaryText.trim()));
+}
+
 function renderDiaryEntry(t){
+  const isExpanded = state.diaryExpandedIds.includes(t.id);
+  if(!isExpanded) return renderDiaryCardCollapsed(t);
+  const isEditing = state.diaryEditModeIds.includes(t.id);
+  return isEditing ? renderDiaryCardEdit(t) : renderDiaryCardView(t);
+}
+
+/* การ์ดแบบยุบ (ค่าเริ่มต้น) — โชว์แค่หัวข้อย่อ แตะเพื่อขยาย */
+function renderDiaryCardCollapsed(t){
+  const written = hasDiaryContent(t);
+  const moodObj = t.diaryMood ? MOODS.find(m=>m.v===t.diaryMood) : null;
+  const snippet = (t.diaryText||'').trim();
+  return `
+    <div class="card card-tap" onclick="app.toggleDiaryExpand('${t.id}')">
+      <div class="row">
+        <div style="font-weight:700;font-size:16px;">${esc(t.name)}</div>
+        <div class="diary-chevron">▾</div>
+      </div>
+      <div class="row" style="margin-top:2px;">
+        <div class="muted">${fmtDate(t.startDate)} – ${fmtDate(t.endDate)}</div>
+        <div class="row" style="gap:6px;flex:0 0 auto;">
+          <span class="tag tag-${t.status}">${STATUS_LABEL[t.status]}</span>
+          ${moodObj ? `<span class="faint">${moodObj.e}</span>` : ''}
+        </div>
+      </div>
+      ${snippet
+        ? `<div class="muted diary-snippet">${esc(snippet)}</div>`
+        : `<div class="faint" style="margin-top:8px;">${written ? 'ยังไม่ได้เขียนบันทึกอิสระ' : 'แตะเพื่อเริ่มเขียนความทรงจำ...'}</div>`
+      }
+    </div>
+  `;
+}
+
+/* การ์ดแบบขยาย โหมดอ่านอย่างเดียว — เหมือนบันทึกที่ "เซฟแล้ว" จริงๆ */
+function renderDiaryCardView(t){
+  const cps = sortCheckpoints(activeCps(t));
+  const highlightCp = t.diaryHighlightId ? cps.find(c=>c.id===t.diaryHighlightId) : null;
+  const moodObj = t.diaryMood ? MOODS.find(m=>m.v===t.diaryMood) : null;
+  return `
+    <div class="card">
+      <div class="row">
+        <div style="font-weight:700;font-size:16px;">${esc(t.name)}</div>
+        <div class="row" style="gap:6px;flex:0 0 auto;">
+          <span class="tag tag-${t.status}">${STATUS_LABEL[t.status]}</span>
+          <div class="diary-chevron up" onclick="app.toggleDiaryExpand('${t.id}')">▾</div>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:2px;margin-bottom:12px;">${fmtDate(t.startDate)} – ${fmtDate(t.endDate)}</div>
+
+      ${moodObj ? `<div class="chip on" style="cursor:default;display:inline-flex;margin-bottom:12px;">${moodObj.e} ${esc(moodObj.v)}</div>` : ''}
+
+      ${highlightCp ? `
+        <div class="row card-tap" style="margin-bottom:12px;padding:8px 10px;background:rgba(92,107,69,.06);border:1px dashed var(--border);border-radius:10px;" onclick="app.openTripToStop('${t.id}')">
+          <div class="muted">✨ ${esc(highlightCp.name)}</div>
+          <div class="faint">ดูจุดนี้ →</div>
+        </div>
+      ` : ''}
+
+      ${t.diaryText ? `<div class="diary-readtext">${esc(t.diaryText)}</div>` : `<div class="faint">ยังไม่ได้เขียนบันทึกอิสระ</div>`}
+
+      <button class="btn btn-ghost btn-sm" style="margin-top:14px;" onclick="app.editDiaryEntry('${t.id}')">✏️ แก้ไข</button>
+    </div>
+  `;
+}
+
+/* การ์ดแบบขยาย โหมดแก้ไข — ฟอร์มเดิม บวกปุ่ม "เสร็จแล้ว" ให้กลับไปโหมดอ่าน */
+function renderDiaryCardEdit(t){
   const cps = sortCheckpoints(activeCps(t));
   const highlightCp = t.diaryHighlightId ? cps.find(c=>c.id===t.diaryHighlightId) : null;
   const moodEditing = !t.diaryMood || state.diaryMoodEditingTripId === t.id;
@@ -1588,6 +1658,11 @@ function renderDiaryEntry(t){
 
       <div class="faint" style="margin-bottom:5px;">บันทึกความทรงจำของทริปนี้</div>
       <textarea placeholder="ทริปนี้ภาพรวมเป็นยังไง ประทับใจอะไร อยากจำอะไรไว้บ้าง..." onchange="app.updateDiaryText('${t.id}', this.value)">${esc(t.diaryText||'')}</textarea>
+
+      <div class="row" style="margin-top:14px;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="app.toggleDiaryExpand('${t.id}')">ยุบการ์ด</button>
+        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="app.finishDiaryEdit('${t.id}')">✓ เสร็จแล้ว</button>
+      </div>
     </div>
   `;
 }
@@ -1955,6 +2030,29 @@ const app = {
     const t = findTrip(tripId);
     if(t) t.diaryText = val;
     markPendingRender(); scheduleSave();
+  },
+  toggleDiaryExpand(tripId){
+    const idx = state.diaryExpandedIds.indexOf(tripId);
+    if(idx>=0){
+      state.diaryExpandedIds = state.diaryExpandedIds.filter(id=>id!==tripId);
+    } else {
+      state.diaryExpandedIds = [...state.diaryExpandedIds, tripId];
+      // ทริปที่ยังไม่มีอะไรเลย ให้เปิดมาเป็นฟอร์มแก้ไขตรงๆ ไม่ต้องกดแก้ไขซ้ำ
+      const t = findTrip(tripId);
+      if(t && !hasDiaryContent(t) && !state.diaryEditModeIds.includes(tripId)){
+        state.diaryEditModeIds = [...state.diaryEditModeIds, tripId];
+      }
+    }
+    render();
+  },
+  editDiaryEntry(tripId){
+    if(!state.diaryEditModeIds.includes(tripId)) state.diaryEditModeIds = [...state.diaryEditModeIds, tripId];
+    if(!state.diaryExpandedIds.includes(tripId)) state.diaryExpandedIds = [...state.diaryExpandedIds, tripId];
+    render();
+  },
+  finishDiaryEdit(tripId){
+    state.diaryEditModeIds = state.diaryEditModeIds.filter(id=>id!==tripId);
+    render();
   },
   // กดชื่อทริปในหน้าจังหวัด/อุทยาน แล้วกระโดดไปหน้าทริปนั้นเลย
   openTripFrom(id){

@@ -128,6 +128,20 @@
   }
   .chip.on{ background: rgba(92,107,69,.16); border-color: var(--olive); color: var(--olive); font-weight:600; }
 
+  /* diary card: collapse/expand + read-only view */
+  .diary-chevron{
+    font-size:13px; color: var(--text-faint); flex:0 0 auto; padding:4px 2px;
+    transition: transform .18s ease;
+  }
+  .diary-chevron.up{ transform: rotate(180deg); cursor:pointer; }
+  .diary-snippet{
+    margin-top:8px; line-height:1.5;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .diary-readtext{
+    white-space:pre-wrap; line-height:1.7; color:var(--text); font-family:'Sarabun',sans-serif; font-size:14px;
+  }
+
   /* modal / sheet */
   .overlay{
     position:fixed; inset:0; background: rgba(58,54,24,.35); z-index:30;
