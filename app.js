@@ -864,7 +864,7 @@ function renderTripDetail(){
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
         <h1 style="margin:6px 0 0;">${esc(t.name)}</h1>
-        <button class="back-btn" style="font-size:15px;padding:4px;flex-shrink:0;" onclick="app.openSheet('edit-trip-name','${t.id}')" aria-label="แก้ไขชื่อทริป">✎</button>
+        <button class="back-btn" style="font-size:15px;padding:4px;flex-shrink:0;" onclick="app.openSheet('edit-trip','${t.id}')" aria-label="แก้ไขชื่อและวันที่ทริป">✎</button>
       </div>
       <div class="muted">${fmtDate(t.startDate)} – ${fmtDate(t.endDate)}</div>
     </div>
@@ -1598,7 +1598,7 @@ function renderHelp(){
 
     ${helpSection('🧭','เริ่มต้นทริปใหม่',
       'ไปที่แท็บ <b style="color:var(--text);">🧭 บันทึก</b> แล้วกดปุ่ม + มุมล่างขวา ใส่ชื่อทริป วันที่เดินทาง และงบประมาณคร่าวๆ (ใส่ทีหลังก็ได้) กด "สร้างทริป" แล้วจะเข้าหน้ารายละเอียดทริปทันที<br>'
-      + 'ตั้งชื่อผิดหรืออยากเปลี่ยนทีหลัง กดไอคอน <b style="color:var(--text);">✎</b> ข้างชื่อทริปในหน้ารายละเอียดทริปได้เลย'
+      + 'ตั้งชื่อหรือวันที่ผิด อยากแก้ทีหลัง กดไอคอน <b style="color:var(--text);">✎</b> ข้างชื่อทริปในหน้ารายละเอียดทริปได้เลย แก้ได้ทั้งชื่อและวันที่เริ่ม-กลับ'
     )}
 
     ${helpSection('📍','เพิ่มจุดแวะ',
@@ -1697,7 +1697,7 @@ function renderSheet(stats, pstats){
   const [type, a, b] = state.sheet;
   let inner = '';
   if(type==='new-trip') inner = sheetNewTrip();
-  else if(type==='edit-trip-name') inner = sheetEditTripName(a);
+  else if(type==='edit-trip') inner = sheetEditTrip(a);
   else if(type==='new-cp') inner = sheetCheckpoint(a, null);
   else if(type==='edit-cp') inner = sheetCheckpoint(a, b);
   else if(type==='province') inner = sheetProvince(decodeURIComponent(a), stats);
@@ -1730,14 +1730,18 @@ function sheetNewTrip(){
   `;
 }
 
-function sheetEditTripName(tripId){
+function sheetEditTrip(tripId){
   const t = findTrip(tripId);
   if(!t) return `<h2 style="margin-top:0;">ไม่พบทริปนี้</h2><div class="faint">ทริปนี้อาจถูกลบไปแล้ว ลองปิดหน้านี้แล้วเปิดใหม่นะครับ</div>`;
   return `
-    <h2 style="margin-top:0;">แก้ไขชื่อทริป</h2>
+    <h2 style="margin-top:0;">แก้ไขข้อมูลทริป</h2>
     <label>ชื่อทริป</label>
     <input id="f-trip-name" value="${esc(t.name)}" placeholder="เช่น เหนือ 5 วัน 4 คืน">
-    <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.saveTripName('${tripId}')">บันทึก</button>
+    <div class="field-row">
+      <div><label>วันที่เริ่ม</label><input id="f-trip-start" type="date" value="${esc(t.startDate||'')}"></div>
+      <div><label>วันที่กลับ</label><input id="f-trip-end" type="date" value="${esc(t.endDate||'')}"></div>
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="app.saveTrip('${tripId}')">บันทึก</button>
   `;
 }
 
@@ -2031,11 +2035,16 @@ const app = {
     state.trips.push(trip); state.sheet=null; state.activeTripId=trip.id;
     render(); scheduleSave();
   },
-  async saveTripName(tripId){
+  async saveTrip(tripId){
     const t = findTrip(tripId); if(!t) return;
     const name = document.getElementById('f-trip-name').value.trim();
     if(!name){ flashInfo('กรอกชื่อทริปก่อนนะครับ'); return; }
-    t.name = name;
+    const startDate = document.getElementById('f-trip-start').value;
+    const endDate = document.getElementById('f-trip-end').value;
+    if(startDate && endDate && endDate < startDate){
+      flashInfo('วันที่กลับมาก่อนวันที่เริ่มเดินทาง ลองตรวจสอบวันที่อีกครั้งนะครับ (ระบบบันทึกให้ตามที่กรอกไว้ก่อน แก้ไขทีหลังได้)');
+    }
+    t.name = name; t.startDate = startDate; t.endDate = endDate;
     scheduleSave(); navBack(()=>{ state.sheet = null; render(); });
   },
   async setStatus(id, val){ const t=findTrip(id); if(t){ t.status=val; render(); scheduleSave(); } },
