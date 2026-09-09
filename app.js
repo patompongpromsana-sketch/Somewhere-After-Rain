@@ -235,8 +235,8 @@ function flashInfo(msg){
   if(flashTimer) clearTimeout(flashTimer);
   flashTimer = setTimeout(()=>{ if(state.toastMode==='info'){ state.toast=null; render(); } }, 3200);
 }
-function askConfirm(message, type, payload){
-  state.confirmDialog = { message, type, payload };
+function askConfirm(message, type, payload, buttons){
+  state.confirmDialog = { message, type, payload, buttons };
   render();
 }
 
@@ -541,9 +541,9 @@ function buildActuals(t){
   }
   return out;
 }
-function normalizeTrips(list){
+function normalizeTrips(list, seed){
   if(!Array.isArray(list)) return [];
-  const seen = new Set();
+  const seen = seed instanceof Set ? seed : new Set();
   return list.map(t=>normalizeTrip(t, seen));
 }
 function activeTrips(){ return state.trips.filter(t=>!t.deleted); }
@@ -1769,7 +1769,7 @@ function renderHelp(){
       <button class="btn btn-primary btn-full" onclick="app.exportData()">⬇️ Export ข้อมูลทั้งหมดเป็นไฟล์</button>
       <label>นำเข้าข้อมูลจากไฟล์ที่เคย Export ไว้ (Import)</label>
       <input type="file" accept="application/json" onchange="app.importData(event)">
-      <div class="faint" style="margin-top:6px;">⚠️ การนำเข้าจะแทนที่ข้อมูลปัจจุบันทั้งหมด</div>
+      <div class="faint" style="margin-top:6px;">ℹ️ ตอนนำเข้า เลือกได้ว่าจะผสานเพิ่มเข้าไป หรือแทนที่ข้อมูลเดิมทั้งหมด</div>
       <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="app.openSheet('trash')">🗑️ ถังขยะ (${state.trips.filter(t=>t.deleted).length} ทริป, ${trashedCheckpoints().length} จุดแวะ)</button>
     </div>
   `;
@@ -1969,14 +1969,17 @@ function sheetTrash(){
 
 function renderConfirmDialog(){
   if(!state.confirmDialog) return '';
-  const { message } = state.confirmDialog;
+  const { message, buttons } = state.confirmDialog;
+  const btnsHtml = buttons
+    ? buttons.map(b=>`<button class="${b.primary?'btn btn-primary':'btn btn-ghost'}" style="${buttons.length>2?'width:100%;':'flex:1;'}" onclick="app.confirmChoice('${b.action}')">${esc(b.label)}</button>`).join('')
+    : `<button class="btn btn-ghost" style="flex:1;" onclick="app.cancelConfirm()">ยกเลิก</button>
+       <button class="btn btn-primary" style="flex:1;" onclick="app.confirmYes()">ยืนยัน</button>`;
   return `
     <div class="overlay confirm-overlay" style="align-items:center;" onclick="if(event.target===this) app.cancelConfirm()">
       <div class="confirm-box">
-        <div style="font-size:14.5px;line-height:1.6;margin-bottom:18px;">${esc(message)}</div>
-        <div style="display:flex;gap:10px;">
-          <button class="btn btn-ghost" style="flex:1;" onclick="app.cancelConfirm()">ยกเลิก</button>
-          <button class="btn btn-primary" style="flex:1;" onclick="app.confirmYes()">ยืนยัน</button>
+        <div style="font-size:14.5px;line-height:1.6;margin-bottom:18px;white-space:pre-line;">${esc(message)}</div>
+        <div style="display:flex;${buttons && buttons.length>2 ? 'flex-direction:column;' : ''}gap:10px;">
+          ${btnsHtml}
         </div>
       </div>
     </div>
@@ -2283,10 +2286,7 @@ const app = {
       state.activeTripId = null;
     } else if(c.type==='permaDelete'){
       state.trips = state.trips.filter(x=>x.id!==c.payload.id);
-    } else if(c.type==='importData'){
-      state.trips = normalizeTrips(c.payload.data.trips);
-      flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ');
-} else if(c.type==='trashCheckpoint'){
+    } else if(c.type==='trashCheckpoint'){
       const t = findTrip(c.payload.tripId);
       const cp = t && (t.checkpoints||[]).find(x=>x.id===c.payload.cpId);
       if(cp){ cp.deleted = true; cp.deletedAt = Date.now(); }
@@ -2294,6 +2294,24 @@ const app = {
       const t = findTrip(c.payload.tripId);
       if(t) t.checkpoints = (t.checkpoints||[]).filter(x=>x.id!==c.payload.cpId);
         }
+    render(); scheduleSave();
+  },
+  // สำหรับ dialog ที่มีปุ่มเลือกมากกว่า 2 ปุ่ม (เช่น เลือกวิธีนำเข้าข้อมูล)
+  async confirmChoice(action){
+    const c = state.confirmDialog; state.confirmDialog = null;
+    if(!c || action==='cancel'){ render(); return; }
+    if(c.type==='importData'){
+      if(action==='merge'){
+        // เก็บ id ทริปเดิมไว้กันชนกับของที่นำเข้ามา ถ้าซ้ำจะได้ id ใหม่แทนที่จะทับของเดิม
+        const seen = new Set(state.trips.map(t=>t.id));
+        const incoming = normalizeTrips(c.payload.data.trips, seen);
+        state.trips = [...state.trips, ...incoming];
+        flashInfo(`ผสานข้อมูลเรียบร้อยแล้วครับ (เพิ่ม ${incoming.length} ทริปใหม่ ของเดิมยังอยู่ครบ)`);
+      } else if(action==='replace'){
+        state.trips = normalizeTrips(c.payload.data.trips);
+        flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ (แทนที่ข้อมูลเดิมทั้งหมด)');
+      }
+    }
     render(); scheduleSave();
   },
 
@@ -2319,7 +2337,16 @@ const app = {
       }
       const currentCount = state.trips.length;
       const incomingCount = data.trips.length;
-      askConfirm(`นำเข้าจะแทนที่ข้อมูลปัจจุบันทั้งหมด (ตอนนี้มี ${currentCount} ทริป) ด้วยข้อมูลในไฟล์ (${incomingCount} ทริป) ต้องการดำเนินการต่อไหมครับ? แนะนำให้ Export ข้อมูลปัจจุบันเก็บไว้ก่อน เผื่อเปลี่ยนใจ`, 'importData', {data});
+      askConfirm(
+        `ไฟล์นี้มี ${incomingCount} ทริป ตอนนี้ในเครื่องมีอยู่ ${currentCount} ทริป เลือกวิธีนำเข้าได้เลยครับ:\n\n"ผสานเพิ่มเข้าไป" จะเก็บของเดิมไว้ครบ แล้วเพิ่มทริปจากไฟล์เข้าไปด้วย (แนะนำ ใช้ตอนอยากเพิ่มทริปใหม่จากอีกเครื่อง)\n"แทนที่ทั้งหมด" จะลบข้อมูลปัจจุบันทิ้งแล้วใช้เฉพาะไฟล์ที่นำเข้าแทน (ใช้ตอนกู้คืนจากไฟล์ backup)`,
+        'importData',
+        {data},
+        [
+          {label:'ยกเลิก', action:'cancel'},
+          {label:'แทนที่ทั้งหมด', action:'replace'},
+          {label:'ผสานเพิ่มเข้าไป', action:'merge', primary:true},
+        ]
+      );
       event.target.value = '';
     }catch(e){
       flashInfo('อ่านไฟล์ไม่สำเร็จ ลองเช็คว่าเป็นไฟล์ JSON ที่ export จากแอปนี้นะครับ');
