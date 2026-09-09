@@ -1971,7 +1971,7 @@ function renderConfirmDialog(){
   if(!state.confirmDialog) return '';
   const { message, buttons } = state.confirmDialog;
   const btnsHtml = buttons
-    ? buttons.map(b=>`<button class="${b.primary?'btn btn-primary':'btn btn-ghost'}" style="${buttons.length>2?'width:100%;':'flex:1;'}" onclick="app.confirmChoice('${b.action}')">${esc(b.label)}</button>`).join('')
+    ? buttons.map(b=>`<button class="${b.danger?'btn btn-danger':(b.primary?'btn btn-primary':'btn btn-ghost')}" style="${buttons.length>2?'width:100%;':'flex:1;'}" onclick="app.confirmChoice('${b.action}')">${esc(b.label)}</button>`).join('')
     : `<button class="btn btn-ghost" style="flex:1;" onclick="app.cancelConfirm()">ยกเลิก</button>
        <button class="btn btn-primary" style="flex:1;" onclick="app.confirmYes()">ยืนยัน</button>`;
   return `
@@ -2308,9 +2308,22 @@ const app = {
         state.trips = [...state.trips, ...incoming];
         flashInfo(`ผสานข้อมูลเรียบร้อยแล้วครับ (เพิ่ม ${incoming.length} ทริปใหม่ ของเดิมยังอยู่ครบ)`);
       } else if(action==='replace'){
-        state.trips = normalizeTrips(c.payload.data.trips);
-        flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ (แทนที่ข้อมูลเดิมทั้งหมด)');
+        // ตัวเลือกทำลายล้าง อย่าเพิ่งลบจริง ให้ยืนยันซ้ำอีกชั้นก่อน กันเผลอกดโดนตอนรีบๆ
+        const currentCount = state.trips.length;
+        askConfirm(
+          `แน่ใจนะครับ? ทริปที่มีอยู่ตอนนี้ทั้งหมด ${currentCount} ทริป (รวมจุดแวะ ค่าใช้จ่าย และบันทึกทุกอย่างในนั้น) จะถูกลบทิ้ง แล้วใช้เฉพาะข้อมูลจากไฟล์ที่นำเข้าแทน กู้คืนไม่ได้อีกแล้ว`,
+          'importReplaceConfirm',
+          c.payload,
+          [
+            {label:'ยกเลิก', action:'cancel'},
+            {label:'⚠️ ยืนยันแทนที่ทั้งหมด', action:'confirmReplace', danger:true},
+          ]
+        );
+        return render();
       }
+    } else if(c.type==='importReplaceConfirm' && action==='confirmReplace'){
+      state.trips = normalizeTrips(c.payload.data.trips);
+      flashInfo('นำเข้าข้อมูลเรียบร้อยแล้วครับ (แทนที่ข้อมูลเดิมทั้งหมด)');
     }
     render(); scheduleSave();
   },
@@ -2338,13 +2351,13 @@ const app = {
       const currentCount = state.trips.length;
       const incomingCount = data.trips.length;
       askConfirm(
-        `ไฟล์นี้มี ${incomingCount} ทริป ตอนนี้ในเครื่องมีอยู่ ${currentCount} ทริป เลือกวิธีนำเข้าได้เลยครับ:\n\n"ผสานเพิ่มเข้าไป" จะเก็บของเดิมไว้ครบ แล้วเพิ่มทริปจากไฟล์เข้าไปด้วย (แนะนำ ใช้ตอนอยากเพิ่มทริปใหม่จากอีกเครื่อง)\n"แทนที่ทั้งหมด" จะลบข้อมูลปัจจุบันทิ้งแล้วใช้เฉพาะไฟล์ที่นำเข้าแทน (ใช้ตอนกู้คืนจากไฟล์ backup)`,
+        `ไฟล์นี้มี ${incomingCount} ทริป ตอนนี้ในเครื่องมีอยู่ ${currentCount} ทริป\n\nแนะนำ "ผสานเพิ่มเข้าไป" — เก็บของเดิมไว้ครบ แล้วเพิ่มทริปจากไฟล์เข้าไปด้วย ใช้ได้เรื่อยๆ ไม่มีของหาย`,
         'importData',
         {data},
         [
-          {label:'ยกเลิก', action:'cancel'},
-          {label:'แทนที่ทั้งหมด', action:'replace'},
           {label:'ผสานเพิ่มเข้าไป', action:'merge', primary:true},
+          {label:'ยกเลิก', action:'cancel'},
+          {label:'⚠️ แทนที่ทั้งหมด (ลบของเดิม)', action:'replace', danger:true},
         ]
       );
       event.target.value = '';
