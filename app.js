@@ -96,6 +96,9 @@ const MOODS = [
 const STATUS_LABEL = {planning:'กำลังวางแผน', ongoing:'กำลังเดินทาง', done:'เสร็จสิ้นแล้ว'};
 
 let state = { trips: [], tab:'trips', mapView:'province', activeTripId:null, tripSubtab:'stops', sheet:null, toast:null, toastMode:'info', confirmDialog:null, expandedCheckpoints: new Set(), gmapFormTripId:null, gmapEditingId:null, diaryMoodEditingTripId:null, diaryExpandedIds:[], diaryEditModeIds:[], loadFailed:false, expandedRegions:[], expandedParkRegions:[], parkQuery:'', dismissedHints:[], useSupabase:false, authLoading:true, authUser:null, authMode:'login', authError:null, authBusy:false, authNotice:null,
+  // สถานะเครื่องคิดเลขบวกยอดใช้จริง (แท็บงบประมาณ) — ephemeral เหมือน expandedCheckpoints ไม่ persist ลง storage
+  // รีเซ็ตใหม่ทุกครั้งที่เปิดเครื่องคิดเลข (ดู app.openCalc)
+  calcTape: [], calcEntry:'', calcClearArmed:false,
   remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1013,14 +1016,20 @@ function renderBudgetSub(t, spent, pct, over){
     <div class="card">
       <label>งบประมาณรวมที่ตั้งไว้ (บาท)</label>
       <input type="number" inputmode="numeric" min="0" value="${t.budget??''}" onchange="app.updateBudget('${t.id}',this.value)">
-      ${t.budget>0 ? `
+      ${t.budget>0 ? (()=>{
+        // งบใกล้หมด (≥80% แต่ยังไม่เกิน) ขึ้นเตือนสีอำพัน ก่อนจะถึงขั้นแดงตอนเกินงบจริง
+        const near = !over && pct>=80;
+        const barCls = over?'over':(near?'warn':'');
+        const hintColor = over?'color:var(--terracotta);':(near?'color:var(--amber);':'');
+        return `
         <div class="row" style="margin-top:12px;">
           <div class="muted">ใช้ไปแล้ว ฿${money(spent)}</div>
-          <div class="muted" style="${over?'color:var(--terracotta);':''}">${over? 'เกิน ฿'+money(spent-t.budget) : 'เหลือ ฿'+money(t.budget-spent)} · ${pct}%</div>
+          <div class="muted" style="${hintColor}">${over? 'เกิน ฿'+money(spent-t.budget) : 'เหลือ ฿'+money(t.budget-spent)} · ${pct}%</div>
         </div>
-        <div class="bar-track"><div class="bar-fill ${over?'over':''}" style="width:${pct}%;"></div></div>
+        <div class="bar-track"><div class="bar-fill ${barCls}" style="width:${pct}%;"></div></div>
         ${over? `<div class="faint" style="color:var(--terracotta);margin-top:6px;">เกินงบไปแล้ว ฿${money(spent-t.budget)}</div>` : ''}
-      ` : `<div class="faint" style="margin-top:8px;">ยังไม่ได้ตั้งงบรวม — ใส่ตัวเลขด้านบน หรือจะตั้งเป็นรายหมวดข้างล่างแทนก็ได้</div>`}
+        `;
+      })() : `<div class="faint" style="margin-top:8px;">ยังไม่ได้ตั้งงบรวม — ใส่ตัวเลขด้านบน หรือจะตั้งเป็นรายหมวดข้างล่างแทนก็ได้</div>`}
       ${catSum>0 ? `
         <div class="row" style="margin-top:12px;"><div class="faint">จัดสรรตามหมวดแล้ว ฿${money(catSum)}</div>
           ${unallocated!=null ? `<div class="faint" style="${unallocated<0?'color:var(--terracotta);':''}">${unallocated>=0? 'เหลือยังไม่จัดสรร ฿'+money(unallocated) : 'จัดสรรเกินงบรวม ฿'+money(-unallocated)}</div>` : ''}
@@ -1036,26 +1045,26 @@ function renderBudgetSub(t, spent, pct, over){
         const spentC = Number(byCategory[c]||0);
         const p = budget>0? Math.min(100, Math.round(spentC/budget*100)) : 0;
         const o = budget>0 && spentC>budget;
+        const near = budget>0 && !o && p>=80;   // ใกล้หมดงบหมวดนี้ (≥80%) แต่ยังไม่เกิน
+        const barCls = o?'over':(near?'warn':'');
+        const hintColor = o?'color:var(--terracotta);':(near?'color:var(--amber);':'');
         const left = budget - spentC;
         return `
           <div style="padding:12px 0;${i>0?'border-top:1px solid var(--border);':''}">
-            <div class="row">
-              <div style="font-size:13.5px;font-weight:600;">${c}</div>
-              ${budget>0? `<div class="faint" style="${o?'color:var(--terracotta);':''}">${p}%</div>` : ''}
-            </div>
+            <div style="font-size:13.5px;font-weight:600;">${c}</div>
             <div style="display:flex;gap:10px;margin-top:8px;">
+              <div style="flex:1;min-width:0;">
+                <div class="faint" style="margin-bottom:3px;">ใช้จริง (บาท)</div>
+                <input type="text" inputmode="none" readonly style="width:100%;text-align:right;padding:8px 10px;cursor:pointer;" placeholder="0" value="${spentC? money(spentC) : ''}" onclick="app.openCalc('${t.id}','${c}')" aria-label="กรอกยอดใช้จริงหมวด${esc(c)}">
+              </div>
               <div style="flex:1;min-width:0;">
                 <div class="faint" style="margin-bottom:3px;">งบ (บาท)</div>
                 <input type="number" inputmode="numeric" min="0" style="width:100%;text-align:right;padding:8px 10px;" placeholder="0" value="${catBudgets[c]??''}" onchange="app.updateCategoryBudget('${t.id}','${c}',this.value)">
               </div>
-              <div style="flex:1;min-width:0;">
-                <div class="faint" style="margin-bottom:3px;">ใช้จริง (บาท)</div>
-                <input type="number" inputmode="numeric" min="0" style="width:100%;text-align:right;padding:8px 10px;" placeholder="0" value="${byCategory[c]??''}" onchange="app.updateCategoryActual('${t.id}','${c}',this.value)">
-              </div>
             </div>
             ${budget>0 ? `
-              <div class="faint" style="margin-top:6px;${o?'color:var(--terracotta);':''}">${o? 'เกินงบ ฿'+money(-left) : 'เหลือ ฿'+money(left)}</div>
-              <div class="bar-track" style="height:6px;"><div class="bar-fill ${o?'over':''}" style="width:${p}%;"></div></div>
+              <div class="faint" style="margin-top:6px;${hintColor}">${o? 'เกินงบ ฿'+money(-left) : 'เหลือ ฿'+money(left)} · ${p}%</div>
+              <div class="bar-track" style="height:6px;"><div class="bar-fill ${barCls}" style="width:${p}%;"></div></div>
             ` : (spentC>0? `<div class="faint" style="margin-top:6px;">ยังไม่ได้ตั้งงบหมวดนี้</div>` : '')}
           </div>
         `;
@@ -1695,6 +1704,9 @@ function renderHelp(){
 function renderSheet(stats, pstats){
   if(!state.sheet) return '';
   const [type, a, b] = state.sheet;
+  // เครื่องคิดเลขใช้ popup เล็กลอยกลางจอ ไม่ใช่ .overlay/.sheet เต็มความสูงแบบด้านล่าง
+  // (งานเร็วๆ ไม่ใช่ฟอร์มยาว) เลยแยก markup ไปคนละทางตั้งแต่ต้น
+  if(type==='calc') return renderCalcPopup(a, b);
   let inner = '';
   if(type==='new-trip') inner = sheetNewTrip();
   else if(type==='edit-trip') inner = sheetEditTrip(a);
@@ -1713,6 +1725,66 @@ function renderSheet(stats, pstats){
       ${inner}
     </div>
   </div>`;
+}
+
+// เครื่องคิดเลขบวกยอดใช้จริง — พิมพ์ยอดใบเสร็จแล้วกด + บวกเข้า "เทป" ไปเรื่อยๆ ทีละใบ
+// เหมือนเครื่องคิดเลขตั้งโต๊ะ แทนที่จะต้องบวกเลขในหัวเองแล้วพิมพ์ยอดรวมทีเดียว
+// state.calcTape/calcEntry เป็น state ชั่วคราวล้วนๆ (เหมือน state.expandedCheckpoints) รีเซ็ตใหม่ทุกครั้งที่เปิด
+function calcTapeTotal(){
+  return (state.calcTape||[]).reduce((s,l)=> s + (l.sign==='-'? -l.value : l.value), 0);
+}
+function renderCalcPopup(tripId, category){
+  const t = findTrip(tripId);
+  if(!t){
+    return `<div class="popup-overlay" onclick="if(event.target===this) app.closeSheet()">
+      <div class="calc-popup">
+        <div class="faint">ไม่พบทริปนี้แล้ว อาจถูกลบไป</div>
+        <button class="btn btn-ghost btn-full" style="margin-top:12px;" onclick="app.closeSheet()">ปิด</button>
+      </div>
+    </div>`;
+  }
+  const tape = state.calcTape||[];
+  const entry = state.calcEntry||'';
+  const total = calcTapeTotal();
+  const willTotal = total + (entry ? (parseFloat(entry)||0) : 0);
+
+  const trailHtml = tape.length ? (
+    tape.map((l,i)=> (i===0?'':(l.sign==='-'?' − ':' + ')) + money(l.value)).join('') +
+    `<button class="clear-link${state.calcClearArmed?' warn':''}" onclick="app.calcClearAll()">${state.calcClearArmed?'แน่ใจนะ? แตะอีกที':'ล้างทั้งหมด'}</button>`
+  ) : '';
+  const displayHtml = entry !== '' ? ('฿'+entry) : (tape.length ? ('฿'+money(total)) : '<span class="ph">0</span>');
+
+  return `
+    <div class="popup-overlay" onclick="if(event.target===this) app.closeSheet()">
+      <div class="calc-popup">
+        <div class="calc-head">
+          <span class="cat-chip">${esc(category)}</span>
+          <button class="calc-close" onclick="app.closeSheet()" aria-label="ปิด">✕</button>
+        </div>
+        <div class="calc-trail">${trailHtml}</div>
+        <div class="calc-display">${displayHtml}</div>
+        <div class="keypad3">
+          <button class="key" onclick="app.calcPressKey('7')">7</button>
+          <button class="key" onclick="app.calcPressKey('8')">8</button>
+          <button class="key" onclick="app.calcPressKey('9')">9</button>
+          <button class="key" onclick="app.calcPressKey('4')">4</button>
+          <button class="key" onclick="app.calcPressKey('5')">5</button>
+          <button class="key" onclick="app.calcPressKey('6')">6</button>
+          <button class="key" onclick="app.calcPressKey('1')">1</button>
+          <button class="key" onclick="app.calcPressKey('2')">2</button>
+          <button class="key" onclick="app.calcPressKey('3')">3</button>
+          <button class="key op-clear" onclick="app.calcClearEntry()">C</button>
+          <button class="key" onclick="app.calcPressKey('0')">0</button>
+          <button class="key op-clear" onclick="app.calcBackspace()" aria-label="ลบทีละตัว">⌫</button>
+        </div>
+        <div class="opRow">
+          <button class="key op op-minus" onclick="app.calcCommitLine('-')">−</button>
+          <button class="key op op-plus" onclick="app.calcCommitLine('+')">+</button>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="app.useCalcAmount()">ใช้ยอดนี้ ฿${money(willTotal)} ✓</button>
+      </div>
+    </div>
+  `;
 }
 
 function sheetNewTrip(){
@@ -2203,6 +2275,62 @@ const app = {
     const catBudgets = t.categoryBudgets || {};
     t.budget = EXPENSE_CATS.reduce((s,c)=>s+Number(catBudgets[c]||0),0);
     render(); scheduleSave();
+  },
+
+  // ---- เครื่องคิดเลขยอดใช้จริง (แท็บงบประมาณ) ----
+  // แตะช่อง "ใช้จริง" แล้วเปิด popup นี้แทนคีย์บอร์ดเปล่าๆ พิมพ์ยอดใบเสร็จทีละใบแล้วกด +
+  // บวกเข้า "เทป" ไปเรื่อยๆ กด "ใช้ยอดนี้" ถึงจะเขียนกลับเข้า categoryActuals จริง (ผ่าน updateCategoryActual เดิม)
+  openCalc(tripId, category){
+    const t = findTrip(tripId); if(!t) return;
+    const current = Number((t.categoryActuals||{})[category] || 0);
+    state.calcTape = current > 0 ? [{ sign:'+', value: current }] : [];
+    state.calcEntry = '';
+    state.calcClearArmed = false;
+    const wasOpen = !!state.sheet;
+    state.sheet = ['calc', tripId, category];
+    render();
+    if(!wasOpen) navPush();   // ให้ปุ่ม back ของมือถือปิด popup นี้ได้เหมือน sheet อื่นๆ
+  },
+  calcPressKey(k){
+    let e = state.calcEntry;
+    e = (e === '0') ? k : (e + k);
+    if(e.length > 8) e = e.slice(0, -1);   // กันพิมพ์ยาวเกินจอ
+    state.calcEntry = e;
+    render();
+  },
+  calcBackspace(){ state.calcEntry = state.calcEntry.slice(0, -1); render(); },
+  calcClearEntry(){ state.calcEntry = ''; render(); },
+  calcCommitLine(sign){
+    const v = parseFloat(state.calcEntry);
+    if(!state.calcEntry || isNaN(v) || v===0){ state.calcEntry = ''; render(); return; }
+    state.calcTape.push({ sign, value: v });
+    state.calcEntry = '';
+    render();
+  },
+  calcClearAll(){
+    // กดสองครั้งถึงล้างจริง กันมือลั่น (เทปยังไม่ได้บันทึกจริงจนกว่าจะกด "ใช้ยอดนี้" อยู่แล้ว
+    // แต่พิมพ์มาหลายบรรทัดแล้วหายเงียบๆ ก็ยังน่ารำคาญ เลยกันไว้เบาๆ)
+    if(!state.calcClearArmed){
+      state.calcClearArmed = true; render();
+      setTimeout(()=>{ if(state.calcClearArmed){ state.calcClearArmed = false; render(); } }, 2500);
+      return;
+    }
+    state.calcTape = []; state.calcEntry = ''; state.calcClearArmed = false;
+    render();
+  },
+  async useCalcAmount(){
+    if(!state.sheet || state.sheet[0]!=='calc') return;
+    const [, tripId, category] = state.sheet;
+    if(state.calcEntry && parseFloat(state.calcEntry) > 0){
+      state.calcTape.push({ sign:'+', value: parseFloat(state.calcEntry) });
+      state.calcEntry = '';
+    }
+    const total = Math.max(0, calcTapeTotal());
+    // ยอดรวมทั้งเทปแทนที่ categoryActuals ของหมวดนั้นค่าเดียว — data model เดิมไม่เปลี่ยน
+    // (ยังเก็บเป็นยอดรวมต่อหมวด ไม่ได้บันทึกทีละรายการ) ผ่าน updateCategoryActual เดิมตรงๆ
+    // เลยได้ debounced save + "บันทึกแล้ว" save-pill แบบเดียวกับแก้ช่องปกติโดยอัตโนมัติ
+    await app.updateCategoryActual(tripId, category, String(total));
+    app.closeSheet();
   },
 
   confirmDeleteTrip(id){

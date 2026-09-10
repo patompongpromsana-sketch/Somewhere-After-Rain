@@ -8,6 +8,7 @@
     --sage: #8FA37E;
     --sage-soft: #E4E9DB;
     --terracotta: #B5674A;
+    --amber: #C98C4A; /* งบใกล้หมด (≥80% แต่ยังไม่เกิน) — โทนอุ่นกว่า sage แต่ยังไม่ถึงขั้น terracotta ของ "เกินงบ" */
     --ink: #3A3618;
     --text: #3A3618;
     --text-muted: #6B6247;
@@ -197,6 +198,7 @@
   /* budget bar */
   .bar-track{ height:9px; border-radius:6px; background: var(--surface-2); overflow:hidden; margin-top:8px; }
   .bar-fill{ height:100%; border-radius:6px; background: var(--sage); transition: width .3s; }
+  .bar-fill.warn{ background: var(--amber); }
   .bar-fill.over{ background: var(--terracotta); }
 
   /* checkpoint item */
@@ -255,4 +257,47 @@
     background: var(--bg); width:100%; max-width:420px; border-radius:16px; padding:20px;
     border:1px solid var(--border); margin: 0 16px 16px;
   }
+
+  /* เครื่องคิดเลขบวกยอดใช้จริง (แท็บงบประมาณ) — popup เล็กลอยกลางจอ ไม่ใช่ .sheet เต็มความสูง
+     เพราะเป็นงานเร็วๆ (พิมพ์ยอดใบเสร็จแล้วกด + บวกไปเรื่อยๆ) ไม่ใช่ฟอร์มยาวแบบแก้ทริป/จุดแวะ */
+  .popup-overlay{
+    position:fixed; inset:0; background: rgba(58,54,24,.35); z-index:30;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .calc-popup{
+    width:100%; max-width:300px; background: var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:16px 16px 18px; box-shadow: 0 24px 55px -14px rgba(58,54,24,.4);
+  }
+  .calc-head{ display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+  .calc-head .cat-chip{ font-size:13px; font-weight:600; color:var(--olive-deep); font-family:'Trirong',serif; flex:1; }
+  .calc-close{ background:none; border:none; color:var(--text-muted); font-size:17px; cursor:pointer; padding:2px; line-height:1; }
+
+  /* เส้นสรุปรายการที่บวกไปแล้ว เช่น "180 + 320 + 95" บรรทัดเดียว เลื่อนแนวนอนได้ถ้ายาว */
+  .calc-trail{
+    font-size:11.5px; color: var(--text-faint); white-space:nowrap; overflow-x:auto; padding: 2px 0 8px;
+    font-variant-numeric:tabular-nums; min-height:15px; display:flex; align-items:center; gap:8px;
+  }
+  .calc-trail .clear-link{ background:none; border:none; color:var(--text-faint); font-size:11px; text-decoration:underline; cursor:pointer; flex-shrink:0; margin-left:auto; padding:2px 0; }
+  .calc-trail .clear-link.warn{ color: var(--terracotta); font-weight:600; }
+
+  .calc-display{
+    text-align:right; font-family:'Trirong',serif; font-weight:700; font-size:30px; color: var(--olive-deep);
+    font-variant-numeric:tabular-nums; padding: 2px 2px 12px; line-height:1.1;
+    overflow-x:auto; white-space:nowrap;
+  }
+  .calc-display .ph{ color: var(--text-faint); }
+
+  .keypad3{ display:grid; grid-template-columns: repeat(3,1fr); gap:7px; margin-bottom:8px; }
+  .key{
+    height:42px; border-radius:10px; border:1px solid var(--border); background: var(--surface-2);
+    font-family:'Trirong',serif; font-weight:600; font-size:16px; color: var(--text); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition: transform .06s ease;
+  }
+  .key:active{ transform: scale(.93); }
+  .key.op-clear{ background:none; border-color:transparent; color: var(--text-faint); font-family:'Sarabun',sans-serif; font-weight:600; font-size:12.5px; }
+
+  .opRow{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:10px; }
+  .key.op{ height:42px; font-size:19px; }
+  .key.op-minus{ background: rgba(181,103,74,.14); color: var(--terracotta); border-color: rgba(181,103,74,.35); }
+  .key.op-plus{ background: rgba(143,163,126,.35); color: var(--olive-deep); border-color: rgba(143,163,126,.6); }
 
