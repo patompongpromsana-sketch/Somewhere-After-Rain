@@ -307,6 +307,15 @@
      รอบก่อน — ประกาศ display:none ไว้หลัง @media เลยไปทับ display:flex ข้างในจนโลโก้ไม่โผล่เลย) */
   .sidebar-brand{ display:none; }
 
+  /* trips-split (list+detail คู่กัน) เช่นเดียวกับ .sidebar-brand ด้านบน:
+     ต้องประกาศค่าเริ่มต้น (มือถือ, ทีละหน้า) "ก่อน" @media เสมอ แล้วให้ media
+     query ด้านล่างมาทับทีหลัง ไม่งั้นจะโดนบั๊กลำดับ CSS แบบเดียวกับโลโก้ sidebar
+     มือถือ: โชว์ทีละ pane ตาม state.activeTripId (เหมือนของเดิมทุกประการ
+     — .trips-pane-list/.trips-pane-detail แค่สลับกันโชว์ ไม่มีอะไรเปลี่ยน) */
+  .trips-pane-list, .trips-pane-detail{ display:none; }
+  .trips-split.showing-list .trips-pane-list{ display:block; }
+  .trips-split.showing-detail .trips-pane-detail{ display:block; }
+
   /* ============================================================
      Ver16 — จอกว้าง/เดสก์ท็อป
      แนวคิด: ไม่แตะโครง HTML/JS เดิมของแต่ละหน้าเลย (renderTripsList,
@@ -326,6 +335,9 @@
 
     .app{ max-width:none; margin:0; padding-left:224px; }
     .content{ max-width:760px; margin:0 auto; padding:28px 32px 60px; }
+    /* หน้าทริป (list+detail) กว้างกว่าหน้าอื่น เพราะมีสองคอลัมน์วางคู่กัน —
+       ใส่คลาส content-trips ไว้เฉพาะตอน state.tab==='trips' (ดู renderApp) */
+    .content.content-trips{ max-width:1300px; }
 
     /* แถบล่างเดิม (bottomnav) กลายเป็น sidebar ซ้ายเต็มความสูงจอ
        ไอคอน+ป้ายชื่อ 4 ปุ่มเดิมทั้งหมด แค่เปลี่ยนทิศทางจากแถวเป็นคอลัมน์ */
@@ -366,5 +378,17 @@
     .topbar .eyebrow{ justify-content:flex-start !important; }
     .topbar img{ width:52px !important; height:52px !important; margin-bottom:6px !important; }
     .topbar h1{ font-size:22px; }
+
+    /* เฟส 2 — หน้าทริปแบบ list+detail คู่ขนาน (จอกว้างเท่านั้น)
+       ซ้าย: รายการทริปทั้งหมด (แคบ, ไม่ scroll ตามคอลัมน์ขวา — sticky ไว้กันเมื่อย)
+       ขวา: รายละเอียดทริปที่เลือก หรือ empty-state ถ้ายังไม่เลือก
+       ทั้งสอง pane มี display:none เป็นค่าเริ่มต้นจากด้านบนไฟล์ (สำหรับมือถือ)
+       — ตรงนี้ประกาศทีหลังในไฟล์ specificity เท่ากัน จึงชนะที่จอกว้างเสมอ */
+    .trips-split{ display:flex; align-items:flex-start; gap:30px; }
+    .trips-pane-list, .trips-pane-detail{ display:block; }
+    .trips-pane-list{ width:328px; flex:0 0 328px; position:sticky; top:28px; max-height:calc(100vh - 56px); overflow-y:auto; padding-right:2px; }
+    .trips-pane-detail{ flex:1; min-width:0; }
+
+    .trips-pane-list .trip-card-active{ border-color:var(--olive); background:rgba(92,107,69,.07); }
   }
 

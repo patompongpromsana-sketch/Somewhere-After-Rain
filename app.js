@@ -690,7 +690,7 @@ function renderApp(){
   const stats = provinceStats();
   const pstats = parkStats();
   let body = '';
-  if(state.tab==='trips'){ body = state.activeTripId ? renderTripDetail() : renderTripsList(); }
+  if(state.tab==='trips'){ body = renderTripsSplit(); }
   else if(state.tab==='dashboard'){ body = renderMapTab(stats, pstats); }
   else if(state.tab==='expenses'){ body = renderExpenseSummary(); }
   else if(state.tab==='diary'){ body = renderDiary(); }
@@ -726,7 +726,7 @@ function renderApp(){
     <div id="save-pill" class="save-pill" aria-live="polite"></div>
     ${state.tab!=='help' ? `<button class="help-fab" onclick="app.goTab('help')" aria-label="วิธีใช้">?</button>` : ''}
     <div class="app">
-      <div class="content">${body}</div>
+      <div class="content ${state.tab==='trips' ? 'content-trips' : ''}">${body}</div>
       ${state.tab==='trips' && !state.activeTripId ? `<button class="fab" onclick="app.openSheet('new-trip')">+</button>` : ''}
       <div class="bottomnav"><div class="bottomnav-inner">
         <div class="sidebar-brand"><img src="${LOGO_HEADER_DATAURI}" alt=""><span>Somewhere<br>After Rain</span></div>
@@ -751,6 +751,30 @@ function renderApp(){
     }
     focusRestore = null;
   }
+}
+
+/* ---------- Trips list+detail (จอกว้าง: แสดงคู่กัน / มือถือ: สลับหน้าแบบเดิม) ---------- */
+// renderTripsList()/renderTripDetail() ยังคืน markup แบบเดิมทุกอย่างเหมือน Ver16
+// ฟังก์ชันนี้แค่ห่อทั้งคู่ไว้ด้วยกัน แล้วให้ CSS (style.css) เป็นคนตัดสินว่าจะ
+// โชว์ทีละอันสลับกัน (มือถือ, จอแคบกว่า 880px) หรือโชว์คู่กัน (จอกว้าง ≥880px)
+// ข้อดี: ไม่ต้องแตะ navPush/navBack/openTrip/closeTrip เลย ของเดิมทำงานเหมือนเดิมทุกจุด
+function renderTripsSplit(){
+  const showingDetail = !!state.activeTripId;
+  return `
+    <div class="trips-split ${showingDetail ? 'showing-detail' : 'showing-list'}">
+      <div class="trips-pane-list">${renderTripsList()}</div>
+      <div class="trips-pane-detail">${showingDetail ? renderTripDetail() : renderTripDetailEmpty()}</div>
+    </div>
+  `;
+}
+function renderTripDetailEmpty(){
+  return `
+    <div class="empty-state" style="padding-top:64px;">
+      <div class="big" style="display:flex;justify-content:center;font-size:40px;">🧭</div>
+      <div class="title">เลือกทริปทางซ้าย</div>
+      <div>เพื่อดูรายละเอียดที่นี่</div>
+    </div>
+  `;
 }
 
 /* ---------- Trips list ---------- */
@@ -856,7 +880,7 @@ function renderTripsList(){
       const visitedCount = activeCps(t).filter(c=>c.visited).length;
       const moodEmoji = t.diaryMood ? (MOODS.find(m=>m.v===t.diaryMood)?.e||'') : '';
       return `
-        <div class="card card-tap" onclick="app.openTrip('${t.id}')">
+        <div class="card card-tap ${state.activeTripId===t.id?'trip-card-active':''}" onclick="app.openTrip('${t.id}')">
           <div class="row">
             <div>
               <div style="font-weight:700;font-size:16px;">${esc(t.name)}</div>
