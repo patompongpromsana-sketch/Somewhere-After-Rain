@@ -301,3 +301,59 @@
   .key.op-minus{ background: rgba(181,103,74,.14); color: var(--terracotta); border-color: rgba(181,103,74,.35); }
   .key.op-plus{ background: rgba(143,163,126,.35); color: var(--olive-deep); border-color: rgba(143,163,126,.6); }
 
+  /* ============================================================
+     Ver16 — จอกว้าง/เดสก์ท็อป
+     แนวคิด: ไม่แตะโครง HTML/JS เดิมของแต่ละหน้าเลย (renderTripsList,
+     renderTripDetail, renderMapTab ฯลฯ ยังคืน markup แบบเดิมทุกอย่าง)
+     ใช้ media query จัดวางองค์ประกอบที่ "ใช้ร่วมกันทุกหน้า" ใหม่แทน:
+       - bottomnav (แถบล่าง) → sidebar ซ้ายเต็มความสูงจอ
+       - .app ไม่ล็อก 480px อีกต่อไป, เนื้อหาขยายกว้างขึ้นแต่ยังจำกัดไว้
+         ไม่ให้กว้างเกินอ่านสบาย (760px, คั่นกลางพื้นที่ที่เหลือจาก sidebar)
+       - .overlay/.sheet (bottom sheet) → กลายเป็น modal ลอยกลางจอ
+     ตั้งใจแยกเฟสนี้ไว้ก่อน — เฟสถัดไปค่อยทำหน้าทริปแบบ list+detail คู่ขนาน
+     (ต้องแตะ navPush/navBack และ renderTripDetail จริงจัง เสี่ยงกว่านี้มาก
+     เลยขอทำเป็นก้อนแยกหลังจากรอบนี้ผ่านการทดสอบแล้ว)
+     breakpoint 880px เลือกเพราะต่ำกว่านั้น sidebar 224px จะเบียดเนื้อหาจนแคบเกินไป
+     ============================================================ */
+  @media (min-width: 880px){
+    body{ padding-bottom:0; }
+
+    .app{ max-width:none; margin:0; padding-left:224px; }
+    .content{ max-width:760px; margin:0 auto; padding:28px 32px 60px; }
+
+    /* แถบล่างเดิม (bottomnav) กลายเป็น sidebar ซ้ายเต็มความสูงจอ
+       ไอคอน+ป้ายชื่อ 4 ปุ่มเดิมทั้งหมด แค่เปลี่ยนทิศทางจากแถวเป็นคอลัมน์ */
+    .bottomnav{
+      left:0; right:auto; top:0; bottom:0; width:224px;
+      border-top:none; border-right:1px solid var(--border);
+      padding-top:22px; overflow-y:auto;
+    }
+    .bottomnav-inner{
+      max-width:none; margin:0; flex-direction:column; align-items:stretch; gap:3px; padding:0 12px;
+    }
+    .sidebar-brand{ display:flex; align-items:center; gap:9px; padding:2px 10px 20px; }
+    .sidebar-brand img{ width:34px; height:34px; border-radius:50%; object-fit:cover; box-shadow:0 0 0 3px var(--bg); }
+    .sidebar-brand span{ font-size:12.5px; font-weight:600; font-family:'Trirong',serif; line-height:1.25; }
+    .navbtn{
+      flex-direction:row; justify-content:flex-start; gap:11px;
+      padding:11px 13px; border-radius:11px; text-align:left;
+    }
+    .navbtn .ic{ font-size:17px; width:20px; text-align:center; }
+    .navbtn.active{ background: rgba(92,107,69,.14); }
+    .navbtn.active .ic{ transform:none; }
+
+    /* fab/help-fab เดิมอิง calc(50% - 240px …) เพราะสมมุติว่า .app กว้าง 480 จัดกลางจอ
+       พอ .app ไม่จัดกลางแบบเดิมแล้ว สูตรนั้นใช้ไม่ได้ — ปักมุมขวาของ viewport ตรงๆ แทน */
+    .fab{ right:34px; bottom:34px; }
+    .help-fab{ top:22px; right:34px; }
+
+    /* bottom sheet → modal ลอยกลางจอ: ของเดิมเป็น overlay+sheet อยู่แล้ว
+       แค่เปลี่ยนตำแหน่งลอยจากชิดขอบล่างเป็นกึ่งกลาง ไม่ต้องแตะ markup */
+    .overlay{ align-items:center; }
+    .sheet{ border-radius:20px; }
+  }
+
+  /* sidebar-brand ซ่อนไว้เป็นค่าเริ่มต้น (โผล่เฉพาะจอกว้างใน media query ด้านบน)
+     เพราะแถบล่างมือถือไม่มีที่พอใส่โลโก้+ชื่อแอป */
+  .sidebar-brand{ display:none; }
+

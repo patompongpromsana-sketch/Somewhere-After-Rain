@@ -729,6 +729,7 @@ function renderApp(){
       <div class="content">${body}</div>
       ${state.tab==='trips' && !state.activeTripId ? `<button class="fab" onclick="app.openSheet('new-trip')">+</button>` : ''}
       <div class="bottomnav"><div class="bottomnav-inner">
+        <div class="sidebar-brand"><img src="${LOGO_HEADER_DATAURI}" alt=""><span>Somewhere<br>After Rain</span></div>
         <button class="navbtn ${state.tab==='trips'?'active':''}" onclick="app.goTab('trips')"><span class="ic">🧭</span>บันทึก</button>
         <button class="navbtn ${state.tab==='dashboard'?'active':''}" onclick="app.goTab('dashboard')"><span class="ic">🗺️</span>แผนที่</button>
         <button class="navbtn ${state.tab==='expenses'?'active':''}" onclick="app.goTab('expenses')"><span class="ic">🧾</span>ค่าใช้จ่าย</button>
