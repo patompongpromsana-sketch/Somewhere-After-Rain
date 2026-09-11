@@ -99,6 +99,10 @@ let state = { trips: [], tab:'trips', mapView:'province', activeTripId:null, tri
   // สถานะเครื่องคิดเลขบวกยอดใช้จริง (แท็บงบประมาณ) — ephemeral เหมือน expandedCheckpoints ไม่ persist ลง storage
   // รีเซ็ตใหม่ทุกครั้งที่เปิดเครื่องคิดเลข (ดู app.openCalc)
   calcTape: [], calcEntry:'', calcClearArmed:false,
+  // ระดับเหรียญรางวัลสูงสุดที่เคยเห็นแล้วต่ออัน {badgeId: tierIdx} — ใช้เทียบว่ามีเหรียญไหน "ปลดใหม่" หรือ
+  // "อัปเกรดระดับ" (เช่น ทองแดง→เงิน) ถึงจะเด้ง toast ฉลอง ไม่งั้นจะเด้งซ้ำทุกครั้งที่เปิดแอป
+  // persist ไปกับข้อมูลทริปเหมือน dismissedHints เพื่อไม่ให้ฉลองซ้ำข้ามอุปกรณ์/รีโหลดหน้า
+  badgeTierSeen: {},
   remoteVersion:null, conflict:false, offlineMode:false, offlineBackup:null, crash:null };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -208,7 +212,8 @@ function sortCheckpoints(list){
 let savePillTimer = null;
 // อัปเดตป้ายนี้ด้วยการแตะ DOM ตรงๆ ไม่ผ่าน render()
 // เพราะการเซฟเกิดขึ้นระหว่างที่ผู้ใช้ยังพิมพ์อยู่ ถ้า render จะทำให้โฟกัสหลุด
-function showSavePill(text, isError){
+// ms ปรับได้ (ข้อความฉลองปลดเหรียญยาวกว่า "บันทึกแล้ว" เลยให้ค้างจอนานขึ้นหน่อย)
+function showSavePill(text, isError, ms){
   const el = document.getElementById('save-pill');
   if(!el) return;
   el.textContent = text;
@@ -217,7 +222,29 @@ function showSavePill(text, isError){
   savePillTimer = setTimeout(()=>{
     const e2 = document.getElementById('save-pill');
     if(e2) e2.className = 'save-pill';
-  }, 1600);
+  }, ms||1600);
+}
+// เช็คว่ามีเหรียญไหน "ปลดใหม่" หรือ "อัปเกรดระดับ" (เช่น ทองแดง→เงิน) เทียบกับ state.badgeTierSeen
+// เรียกจาก doSave() ก่อนสร้าง payload ทุกครั้ง เพื่อให้ badgeTierSeen ที่อัปเดตแล้วติดไปกับการบันทึกรอบนั้นเลย
+// ไม่ต้องยิง save อีกรอบแยกต่างหาก — คืนข้อความสำหรับ save-pill ฉลอง หรือ null ถ้าไม่มีอะไรใหม่
+function computeBadgeCelebration(){
+  try{
+    const stats = provinceStats(), pstats = parkStats();
+    const badges = computeBadges(stats, pstats);
+    const seen = state.badgeTierSeen || (state.badgeTierSeen = {});
+    const newly = [];
+    badges.forEach(b=>{
+      const idx = badgeTierIndex(b);
+      const prev = seen[b.id]!=null ? seen[b.id] : -1;
+      if(idx > prev){
+        seen[b.id] = idx;
+        const label = (b.tiers.length>1 && b.tiers[idx] && b.tiers[idx].label) ? ` (${b.tiers[idx].label})` : '';
+        newly.push(b.name + label);
+      }
+    });
+    if(!newly.length) return null;
+    return newly.length===1 ? `🎉 ปลดล็อกเหรียญใหม่! ${newly[0]}` : `🎉 ปลดล็อกเหรียญใหม่ ${newly.length} อัน! ${newly.join(', ')}`;
+  }catch(e){ console.error('badge celebration check failed', e); return null; }
 }
 
 let flashTimer = null;
@@ -270,6 +297,7 @@ async function loadDataFromSupabase(){
     if(data){
       state.trips = normalizeTrips(data.data && data.data.trips);
       state.dismissedHints = (data.data && Array.isArray(data.data.dismissedHints)) ? data.data.dismissedHints : [];
+      state.badgeTierSeen = (data.data && data.data.badgeTierSeen && typeof data.data.badgeTierSeen==='object') ? data.data.badgeTierSeen : {};
       // จำเวอร์ชันที่โหลดมา ไว้เทียบตอนบันทึกว่ามีเครื่องอื่นแก้แทรกหรือเปล่า
       state.remoteVersion = data.updated_at || null;
     } else {
@@ -311,7 +339,7 @@ async function storageSet(key, value){
 async function loadData(){
   try{
     const r = await storageGet(STORAGE_KEY);
-    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); state.dismissedHints = Array.isArray(p.dismissedHints)? p.dismissedHints : []; purgeOldTrash(); }
+    if(r && r.value){ const p = JSON.parse(r.value); state.trips = normalizeTrips(p.trips); state.dismissedHints = Array.isArray(p.dismissedHints)? p.dismissedHints : []; state.badgeTierSeen = (p.badgeTierSeen && typeof p.badgeTierSeen==='object') ? p.badgeTierSeen : {}; purgeOldTrash(); }
   }catch(e){ /* no data yet */ }
 }
 let saveInFlight = false;
@@ -322,10 +350,12 @@ async function doSave(retrying){
   // ถ้าโหลดข้อมูลเข้ามาไม่สำเร็จ state.trips ในหน่วยความจำอาจไม่ใช่ข้อมูลจริง
   // การบันทึกตอนนี้จะกลายเป็นการล้างข้อมูลบนคลาวด์ทิ้ง
   if(state.loadFailed || state.conflict){ saveDirty = false; return; }
+  // เช็คก่อนสร้าง payload เสมอ ให้ badgeTierSeen ที่เพิ่งอัปเดต (ถ้ามีเหรียญปลดใหม่) ติดไปกับการบันทึกรอบนี้เลย
+  const badgeCelebrateText = computeBadgeCelebration();
   try{
     if(state.useSupabase && state.authUser){
       const stamp = new Date().toISOString();
-      const payload = { data: {trips: state.trips, dismissedHints: state.dismissedHints||[]}, updated_at: stamp };
+      const payload = { data: {trips: state.trips, dismissedHints: state.dismissedHints||[], badgeTierSeen: state.badgeTierSeen||{}}, updated_at: stamp };
       let rows = null, error = null;
       if(state.remoteVersion){
         // เขียนทับได้ต่อเมื่อ updated_at บนคลาวด์ยังเป็นค่าเดิมที่เราโหลดมา
@@ -357,13 +387,13 @@ async function doSave(retrying){
       // เผื่อว่าตารางมี trigger/default ที่เขียน updated_at ทับเอง ไม่งั้นรอบถัดไปจะแจ้งชนกันทั้งที่ไม่ได้ชน
       state.remoteVersion = (Array.isArray(rows) && rows[0] && rows[0].updated_at) ? rows[0].updated_at : stamp;
     } else {
-      await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips, dismissedHints: state.dismissedHints||[]}));
+      await storageSet(STORAGE_KEY, JSON.stringify({trips: state.trips, dismissedHints: state.dismissedHints||[], badgeTierSeen: state.badgeTierSeen||{}}));
       // อยู่ในโหมดสำรองเพราะต่อคลาวด์ไม่ได้: จดไว้ด้วยว่านี่คือของที่ยังไม่ได้ซิงก์
       if(state.offlineMode){
         try{ localStorage.setItem(OFFLINE_KEY, JSON.stringify({savedAt: new Date().toISOString(), trips: state.trips})); }catch(e){}
       }
     }
-    showSavePill('บันทึกแล้ว');
+    showSavePill(badgeCelebrateText || 'บันทึกแล้ว', false, badgeCelebrateText ? 2600 : 1600);
     // เคลียร์เฉพาะ toast แจ้งเซฟพลาดเท่านั้น
     // ถ้าเคลียร์ทุกโหมด ข้อความเตือนจาก flashInfo() จะหายก่อนผู้ใช้ทันอ่าน
     if(state.toastMode === 'save-error' && state.toast){ state.toast = null; render(); }
@@ -1091,6 +1121,14 @@ function renderBudgetSub(t, spent, pct, over){
 /* ---------- Dashboard ---------- */
 /* ---------- Map (province + parks merged, switched by a toggle) ---------- */
 /* ---------- Badges (คำนวณจากสถิติที่มีอยู่แล้วทั้งหมด ไม่เก็บข้อมูลใหม่) ---------- */
+// กลุ่มเหรียญ 6 ชุด ตามธีมสนุกๆ (ดูหัวข้อ 11 ใน CONTEXT — คุยตกลงกันในแชทมอคอัพก่อนลงโค้ดจริง)
+// ลำดับนี้คือลำดับที่ใช้แสดงผลจริงในหน้ารางวัลด้วย
+const BADGE_GROUPS = ['สายลุยทั่วไทย', 'เจ้าถิ่นประจำภาค', 'ขาลุยอุทยาน', 'สิงห์นักบิด', 'สายออกทริปไม่มีหยุด', 'ขาบันทึกใจ'];
+// ไอคอน/ชื่อของเหรียญ "เจ้าถิ่นประจำภาค" 6 อัน อิงลำดับเดียวกับ REGIONS เป๊ะๆ (เหนือ/อีสาน/กลาง/ตะวันออก/ตะวันตก/ใต้)
+const REGION_BADGE_META = [
+  {id:'north', icon:'⛰️'}, {id:'isaan', icon:'🌻'}, {id:'central', icon:'🌾'},
+  {id:'east', icon:'🥭'}, {id:'west', icon:'🌉'}, {id:'south', icon:'🏝️'},
+];
 function computeBadges(stats, pstats){
   const trips = activeTrips();
   const regionsVisited = REGIONS.filter(r=> r.provinces.some(p=> stats[p] && stats[p].count>0)).length;
@@ -1112,19 +1150,92 @@ function computeBadges(stats, pstats){
   const maxTripsPerYear = Object.keys(tripsByYear).length ? Math.max(...Object.values(tripsByYear)) : 0;
   const moodTripsCount = trips.filter(t=>t.diaryMood).length;
 
+  // จำนวนจุดแวะที่ไปแล้วจริง (ทุกจุด ไม่จำกัดแค่ในอุทยาน) — ทริปที่ยัง "กำลังวางแผน" ไม่นับ
+  // เหมือน provinceStats()/parkStats() ทุกประการ เพื่อให้ตัวเลขสอดคล้องกันทั้งแอป
+  let checkpointsVisited = 0;
+  trips.forEach(t=>{ if(t.status==='planning') return; activeCps(t).forEach(c=>{ if(c.visited) checkpointsVisited++; }); });
+
+  // แยกนักสะสมตราปั๊มเดิมเป็น "สายเขา"/"สายทะเล" ตาม ptype จริงใน PARKS_DATA
+  // (นับ 236 แห่งทั้งหมด: บก 209 + บก (มีชายฝั่งทะเล) 1 + บก/ทะเลสาบ 3 = บก 213, ทะเล 23)
+  const LAND_PTYPES = ['บก', 'บก (มีชายฝั่งทะเล)', 'บก/ทะเลสาบ'];
+  const parksLandTotal = PARKS_DATA.filter(p=> LAND_PTYPES.includes(p.ptype)).length;
+  const parksLandVisited = PARKS_DATA.filter(p=> LAND_PTYPES.includes(p.ptype) && pstats[p.key] && pstats[p.key].count>0).length;
+  const parksSeaTotal = PARKS_DATA.filter(p=> p.ptype==='ทะเล').length;
+  const parksSeaVisited = PARKS_DATA.filter(p=> p.ptype==='ทะเล' && pstats[p.key] && pstats[p.key].count>0).length;
+
+  // ทริปเดียวที่ขับไกลที่สุด / นานที่สุด (ต่างจากระยะทางสะสมที่รวมทุกทริป)
+  let longestTripKm = 0;
+  trips.forEach(t=>{
+    const v = t.vehicle;
+    if(v && v.startOdo!=null && v.endOdo!=null && v.endOdo>=v.startOdo) longestTripKm = Math.max(longestTripKm, v.endOdo - v.startOdo);
+  });
+  let longestTripDays = 0;
+  trips.forEach(t=>{
+    if(!t.startDate || !t.endDate) return;
+    const d1 = new Date(t.startDate+'T00:00:00'), d2 = new Date(t.endDate+'T00:00:00');
+    if(isNaN(d1.getTime()) || isNaN(d2.getTime()) || d2<d1) return;
+    longestTripDays = Math.max(longestTripDays, Math.round((d2-d1)/86400000) + 1);
+  });
+
+  // นับเฉพาะทริปที่ "เสร็จสิ้นแล้ว" เหมือนเหรียญพี่น้องในกลุ่มเดียวกัน (นักเดินทางขาประจำ) — ทริปที่ยังวางแผน/กำลังไปอยู่ยังไม่นับว่าสำเร็จ
+  const doneTrips = trips.filter(t=>t.status==='done');
+  const totalTripsCount = doneTrips.length;
+
+  // เดือนติดต่อกันมากที่สุด (นับปีปฏิทิน-เดือนที่มีทริป "เสร็จสิ้นแล้ว" เริ่มอย่างน้อย 1 ทริป) — เอาสถิติสูงสุดในประวัติ ไม่ใช่แค่ต่อเนื่องปัจจุบัน
+  const monthsWithTrip = new Set();
+  doneTrips.forEach(t=>{ if(t.startDate) monthsWithTrip.add(t.startDate.slice(0,7)); });
+  const monthKeys = Array.from(monthsWithTrip).sort();
+  let monthStreak = 0, curStreak = 0, prevIdx = null;
+  monthKeys.forEach(k=>{
+    const [y,m] = k.split('-').map(Number);
+    const idx = y*12 + (m-1);
+    curStreak = (prevIdx!==null && idx===prevIdx+1) ? curStreak+1 : 1;
+    monthStreak = Math.max(monthStreak, curStreak);
+    prevIdx = idx;
+  });
+
+  const diaryTextCount = trips.filter(t=> (t.diaryText||'').trim()).length;
+  const diaryHighlightCount = trips.filter(t=> !!t.diaryHighlightId).length;
+
+  const regionBadges = REGIONS.map((r,i)=>{
+    const meta = REGION_BADGE_META[i];
+    const value = r.provinces.filter(p=> stats[p] && stats[p].count>0).length;
+    return { id: meta.id, icon: meta.icon, name:`เจ้าถิ่น${r.name}`, value, total:r.provinces.length, unit:'จังหวัด',
+      group:'เจ้าถิ่นประจำภาค', tiers:[{label:null, target:r.provinces.length}] };
+  });
+
   return [
     { id:'regions', icon:'🗺️', name:'ไปครบ 6 ภาค', value: regionsVisited, total: REGIONS.length,
-      tiers:[{label:null, target:REGIONS.length}] },
+      group:'สายลุยทั่วไทย', tiers:[{label:null, target:REGIONS.length}] },
     { id:'provinces', icon:'🧭', name:'นักบุกเบิก', value: provincesVisited, total: ALL_PROVINCES.length,
-      tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+      group:'สายลุยทั่วไทย', tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+    { id:'cpcount', icon:'📍', name:'นักสะสมจุดแวะ', value: checkpointsVisited, unit:'จุด',
+      group:'สายลุยทั่วไทย', tiers:[{label:'ทองแดง',target:20},{label:'เงิน',target:50},{label:'ทอง',target:100}] },
+    ...regionBadges,
     { id:'parks', icon:'🏞️', name:'นักสะสมตราปั๊ม', value: parksVisited, total: PARKS_DATA.length,
-      tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+      group:'ขาลุยอุทยาน', tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+    { id:'parkland', icon:'🌲', name:'สายเขา', value: parksLandVisited, total: parksLandTotal, unit:'แห่ง',
+      group:'ขาลุยอุทยาน', tiers:[{label:'ทองแดง',target:10},{label:'เงิน',target:30},{label:'ทอง',target:60}] },
+    { id:'parksea', icon:'🌊', name:'สายทะเล', value: parksSeaVisited, total: parksSeaTotal, unit:'แห่ง',
+      group:'ขาลุยอุทยาน', tiers:[{label:'ทองแดง',target:5},{label:'เงิน',target:10},{label:'ทอง',target:15}] },
     { id:'distance', icon:'🚗', name:'ระยะทางสะสม', value: totalDist, unit:'กม.',
-      tiers:[{label:'ทองแดง',target:1000},{label:'เงิน',target:5000},{label:'ทอง',target:10000}] },
+      group:'สิงห์นักบิด', tiers:[{label:'ทองแดง',target:1000},{label:'เงิน',target:5000},{label:'ทอง',target:10000}] },
+    { id:'marathon', icon:'🏁', name:'มาราธอนถนน', value: longestTripKm, unit:'กม./ทริป',
+      group:'สิงห์นักบิด', tiers:[{label:'ทองแดง',target:200},{label:'เงิน',target:500},{label:'ทอง',target:1000}] },
+    { id:'longtrip', icon:'⏳', name:'จอมทริปยาว', value: longestTripDays, unit:'วัน/ทริป',
+      group:'สิงห์นักบิด', tiers:[{label:'ทองแดง',target:3},{label:'เงิน',target:7},{label:'ทอง',target:14}] },
     { id:'yearly', icon:'📅', name:'นักเดินทางขาประจำ', value: maxTripsPerYear, unit:'ทริป/ปี',
-      tiers:[{label:null, target:5}] },
+      group:'สายออกทริปไม่มีหยุด', tiers:[{label:null, target:5}] },
+    { id:'triptotal', icon:'🎒', name:'ทริปสะสม', value: totalTripsCount, unit:'ทริป',
+      group:'สายออกทริปไม่มีหยุด', tiers:[{label:'ทองแดง',target:5},{label:'เงิน',target:15},{label:'ทอง',target:30}] },
+    { id:'streak', icon:'🔥', name:'สายไม่หยุดพัก', value: monthStreak, unit:'เดือนติด',
+      group:'สายออกทริปไม่มีหยุด', tiers:[{label:'ทองแดง',target:3},{label:'เงิน',target:6},{label:'ทอง',target:12}] },
     { id:'mood', icon:'😍', name:'ขาบันทึกมู้ด', value: moodTripsCount, unit:'ทริป',
-      tiers:[{label:null, target:10}] },
+      group:'ขาบันทึกใจ', tiers:[{label:null, target:10}] },
+    { id:'diarytext', icon:'✍️', name:'นักเล่าเรื่อง', value: diaryTextCount, unit:'ทริป',
+      group:'ขาบันทึกใจ', tiers:[{label:'ทองแดง',target:5},{label:'เงิน',target:15},{label:'ทอง',target:30}] },
+    { id:'highlight', icon:'✨', name:'โมเมนต์ในดวงใจ', value: diaryHighlightCount, unit:'ทริป',
+      group:'ขาบันทึกใจ', tiers:[{label:'ทองแดง',target:5},{label:'เงิน',target:15},{label:'ทอง',target:30}] },
   ];
 }
 // ระดับที่ปลดล็อกแล้ว: -1 ยังไม่ปลด, 0/1/2 = ทองแดง/เงิน/ทอง (หรือระดับเดียวสำหรับเหรียญไม่มีขั้น)
@@ -1135,18 +1246,39 @@ function badgeTierIndex(b){
 }
 // ตราวงกลมเส้นหมึกแบบเดียวกับตราปั๊มอุทยาน — ใช้โทนสีไล่ระดับเดียวกับ v1/v2/v3
 // ที่มีอยู่แล้ว (sage → olive → olive-deep) แทนสีทองแดง/เงิน/ทองจริง ให้เข้าพาเลตเดิม
+// ปลดถึงระดับสูงสุดของเหรียญนั้น (maxed) จะมีริบบิ้นห้อยด้านล่างเพิ่ม เลยต้องขยาย viewBox ให้สูงขึ้น
 function badgeStampSvg(b, tierIdx, size){
   size = size||60;
   const unlocked = tierIdx>=0;
+  const maxed = unlocked && tierIdx === b.tiers.length-1;
   const ringColor = !unlocked ? 'var(--border)' : tierIdx===2 ? 'var(--olive-deep)' : tierIdx===1 ? 'var(--olive)' : 'var(--sage)';
+  const ribbon = maxed ? `
+      <circle cx="30" cy="58" r="4" fill="var(--olive-deep)"/>
+      <path d="M26,58 L18,74 L24,70 L26,74 Z" fill="var(--olive-deep)"/>
+      <path d="M34,58 L42,74 L36,70 L34,74 Z" fill="var(--olive-deep)"/>` : '';
   return `
-    <svg width="${size}" height="${size}" viewBox="0 0 60 60">
+    <svg width="${size}" height="${Math.round(size*78/60)}" viewBox="0 0 60 78">
       <circle cx="30" cy="30" r="27" fill="var(--surface)" stroke="${ringColor}" stroke-width="2.5" ${!unlocked?'stroke-dasharray="4 3"':''}/>
       <circle cx="30" cy="30" r="21" fill="none" stroke="${ringColor}" stroke-width="1" opacity="${unlocked?0.5:0.3}"/>
       <text x="30" y="32" text-anchor="middle" dominant-baseline="central" font-size="26" ${!unlocked?'opacity="0.35"':''}>${unlocked ? b.icon : '🔒'}</text>
+      ${ribbon}
     </svg>
   `;
 }
+function badgeCellHtml(b){
+  const tierIdx = badgeTierIndex(b);
+  const unlocked = tierIdx>=0;
+  const sub = b.tiers.length>1 ? (unlocked ? (b.tiers[tierIdx].label||'ปลดแล้ว') : `${money(b.value)}/${money(b.tiers[0].target)}`)
+                                : (unlocked ? 'ปลดแล้ว' : `${money(b.value)}/${money(b.tiers[0].target)}`);
+  return `
+    <div style="text-align:center;cursor:pointer;" onclick="app.openSheet('badge','${b.id}')">
+      ${badgeStampSvg(b, tierIdx, 62)}
+      <div style="font-size:11px;font-weight:600;margin-top:6px;font-family:'Trirong',serif;line-height:1.3;color:${unlocked?'var(--olive-deep)':'var(--text-faint)'};">${b.name}</div>
+      <div class="faint" style="font-size:9px;margin-top:1px;">${sub}</div>
+    </div>`;
+}
+// เหรียญแบ่งเป็น 6 กลุ่มตามธีม (BADGE_GROUPS) แทนกริดรวมยาวๆ อันเดียว — ใช้ pattern
+// .region-block/.region-title เดียวกับที่หน้าแผนที่จังหวัดแบ่งภาคอยู่แล้ว ไม่ต้องเพิ่ม CSS ใหม่
 function renderBadgesBody(stats, pstats){
   const badges = computeBadges(stats, pstats);
   const unlockedCount = badges.filter(b=>badgeTierIndex(b)>=0).length;
@@ -1155,18 +1287,17 @@ function renderBadgesBody(stats, pstats){
       <div class="muted">ปลดแล้ว</div>
       <div class="stat-num" style="font-size:28px;margin-top:2px;">${unlockedCount}<span style="font-size:14px;color:var(--text-faint);">/${badges.length}</span></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;">
-      ${badges.map(b=>{
-        const tierIdx = badgeTierIndex(b);
-        const unlocked = tierIdx>=0;
-        return `
-        <div style="text-align:center;cursor:pointer;" onclick="app.openSheet('badge','${b.id}')">
-          ${badgeStampSvg(b, tierIdx, 62)}
-          <div style="font-size:11px;font-weight:600;margin-top:6px;font-family:'Trirong',serif;line-height:1.3;color:${unlocked?'var(--olive-deep)':'var(--text-faint)'};">${b.name}</div>
-          <div class="faint" style="font-size:9px;margin-top:1px;">${b.tiers.length>1 ? (unlocked ? (b.tiers[tierIdx].label||'ปลดแล้ว') : `${money(b.value)}/${money(b.tiers[0].target)}`) : (unlocked?'ปลดแล้ว':`${money(b.value)}/${money(b.tiers[0].target)}`)}</div>
+    ${BADGE_GROUPS.map(g=>{
+      const list = badges.filter(b=>b.group===g);
+      const gUnlocked = list.filter(b=>badgeTierIndex(b)>=0).length;
+      return `
+        <div class="region-block">
+          <div class="region-title row"><span>${g}</span><span class="faint">${gUnlocked}/${list.length}</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px 8px;">
+            ${list.map(badgeCellHtml).join('')}
+          </div>
         </div>`;
-      }).join('')}
-    </div>
+    }).join('')}
   `;
 }
 
