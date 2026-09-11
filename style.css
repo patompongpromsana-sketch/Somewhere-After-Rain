@@ -301,6 +301,12 @@
   .key.op-minus{ background: rgba(181,103,74,.14); color: var(--terracotta); border-color: rgba(181,103,74,.35); }
   .key.op-plus{ background: rgba(143,163,126,.35); color: var(--olive-deep); border-color: rgba(143,163,126,.6); }
 
+  /* sidebar-brand (โลโก้+ชื่อแอปในแถบ nav) ซ่อนไว้เป็นค่าเริ่มต้นก่อน แล้วให้ media query
+     ด้านล่างมาเปิดทีหลังตอนจอกว้าง — ต้องประกาศ "ก่อน" @media เท่านั้น ไม่งั้น specificity เท่ากัน
+     กฎที่มาทีหลังใน CSS ชนะเสมอไม่ว่าจะอยู่ใน media query หรือไม่ (บั๊กที่เจอจริงตอนขึ้น GitHub Pages
+     รอบก่อน — ประกาศ display:none ไว้หลัง @media เลยไปทับ display:flex ข้างในจนโลโก้ไม่โผล่เลย) */
+  .sidebar-brand{ display:none; }
+
   /* ============================================================
      Ver16 — จอกว้าง/เดสก์ท็อป
      แนวคิด: ไม่แตะโครง HTML/JS เดิมของแต่ละหน้าเลย (renderTripsList,
@@ -351,9 +357,14 @@
        แค่เปลี่ยนตำแหน่งลอยจากชิดขอบล่างเป็นกึ่งกลาง ไม่ต้องแตะ markup */
     .overlay{ align-items:center; }
     .sheet{ border-radius:20px; }
-  }
 
-  /* sidebar-brand ซ่อนไว้เป็นค่าเริ่มต้น (โผล่เฉพาะจอกว้างใน media query ด้านบน)
-     เพราะแถบล่างมือถือไม่มีที่พอใส่โลโก้+ชื่อแอป */
-  .sidebar-brand{ display:none; }
+    /* หัวข้อแต่ละหน้า (.topbar) เดิมออกแบบมาให้จอแคบ: โลโก้ใหญ่กลางจอ+เว้นบรรทัดเยอะ
+       ทำให้บนจอกว้างเห็นเป็นช่องว่างตั้งยาวๆ ก่อนถึงเนื้อหาจริง เหมือนที่เจอตอนเทียบกับมอคอัพ
+       .topbar ของหน้าบันทึกมี inline style (text-align:center ฯลฯ) ต้องข่มด้วย !important ตรงนี้
+       ย่อโลโก้ + จัดชิดซ้าย ให้เหลือพื้นที่ให้เนื้อหาเร็วขึ้น ไม่ต้องแก้ markup ใน app.js เลย */
+    .topbar{ text-align:left !important; padding:4px 0 10px !important; }
+    .topbar .eyebrow{ justify-content:flex-start !important; }
+    .topbar img{ width:52px !important; height:52px !important; margin-bottom:6px !important; }
+    .topbar h1{ font-size:22px; }
+  }
 
