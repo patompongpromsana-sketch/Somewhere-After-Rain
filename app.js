@@ -967,7 +967,7 @@ function renderStopsSub(t){
           <div class="big">📍</div>
           <div class="title">ยังไม่มีจุดแวะ</div>
           <div>เพิ่มสถานที่ที่วางแผนจะไป แล้วกลับมาบันทึกความทรงจำทีหลังได้</div>
-        </div>` : cps.map((c,i)=>{
+        </div>` : `<div class="cp-list">${cps.map((c,i)=>{
         const expanded = state.expandedCheckpoints.has(c.id);
         return `
         <div class="cp-item">
@@ -993,7 +993,7 @@ function renderStopsSub(t){
             </div>
           ` : ''}
         </div>
-      `;}).join('')}
+      `;}).join('')}</div>`}
     </div>
     <div class="faint" style="text-align:center;margin-bottom:10px;">แตะที่การ์ดเพื่อดูรายละเอียด/แก้ไข — อยากรู้ระยะทางเส้นทาง ดูได้ที่แท็บ "Google Maps"</div>
     <button class="btn btn-primary btn-full" onclick="app.openSheet('new-cp','${t.id}')">+ เพิ่มจุดแวะ</button>
@@ -1353,7 +1353,7 @@ function renderProvinceMapBody(stats){
   },0);
 
   return `
-    <div class="map-wrap">
+    <div class="map-split"><div class="map-split-left"><div class="map-wrap">
       <svg viewBox="0 0 ${MAP_VIEW.w} ${MAP_VIEW.h}" xmlns="http://www.w3.org/2000/svg">
         ${PROVINCE_PATHS.map(p=>{
           const c = stats[p.th] ? stats[p.th].count : 0;
@@ -1361,13 +1361,15 @@ function renderProvinceMapBody(stats){
           return `<path class="map-path ${cls}" d="${p.d}" onclick="app.openSheet('province','${encodeURIComponent(p.th)}')"><title>${p.th}</title></path>`;
         }).join('')}
       </svg>
-    </div>
+    </div></div><div class="map-split-right">
 
     <div class="stat-grid" style="margin-bottom:16px;">
       <div class="stat-box"><div class="stat-num">${visitedProvinces.length}<span style="font-size:13px;color:var(--text-faint);">/77</span></div><div class="stat-label">ฉันไปแล้ว</div></div>
       <div class="stat-box"><div class="stat-num">${totalTrips}</div><div class="stat-label">เรื่องราว</div></div>
       <div class="stat-box"><div class="stat-num">${money(totalDist)}</div><div class="stat-label">ระยะทาง</div></div>
     </div>
+
+    </div></div>
 
     ${REGIONS.map(r=>{
       const expanded = state.expandedRegions.includes(r.name);
@@ -1396,7 +1398,7 @@ function renderProvinceMapBody(stats){
 function renderParksMapBody(pstats){
   const visitedCount = PARKS_DATA.filter(p=>pstats[p.key].count>0).length;
   return `
-    <div class="map-wrap">
+    <div class="map-split"><div class="map-split-left"><div class="map-wrap">
       <svg viewBox="0 0 ${MAP_VIEW.w} ${MAP_VIEW.h}" xmlns="http://www.w3.org/2000/svg">
         ${PROVINCE_PATHS.map(p=>{
           const c = PARKS_DATA.filter(pk=>pk.province===p.th && pstats[pk.key].count>0).length;
@@ -1404,13 +1406,15 @@ function renderParksMapBody(pstats){
           return `<path class="map-path ${cls}" d="${p.d}" onclick="app.openSheet('province-parks','${encodeURIComponent(p.th)}')"><title>${p.th}</title></path>`;
         }).join('')}
       </svg>
-    </div>
+    </div></div><div class="map-split-right">
 
     <div class="card" style="text-align:center;margin-bottom:16px;">
       <div class="muted">ไปแล้ว</div>
       <div class="stat-num" style="font-size:28px;margin-top:2px;">${visitedCount}<span style="font-size:14px;color:var(--text-faint);">/${PARKS_DATA.length}</span></div>
     </div>
     <div class="muted" style="margin-bottom:10px;">แตะจังหวัดบนแผนที่ดูอุทยาน/เขตในจังหวัดนั้น หรือค้นหา/เลือกจากรายชื่อด้านล่างก็ได้</div>
+
+    </div></div>
 
     <input id="park-search" type="search" placeholder="ค้นหาชื่ออุทยานหรือจังหวัด…" value="${esc(state.parkQuery||'')}" oninput="app.setParkQuery(this)" style="margin-bottom:12px;">
 
@@ -1571,7 +1575,7 @@ function renderExpenseSummary(){
       <h1>สรุปค่าใช้จ่าย</h1>
     </div>
 
-    <div class="card" style="text-align:center;">
+    <div class="exp-top-row"><div class="card" style="text-align:center;">
       <div class="muted">ใช้จ่ายรวมทั้งหมด</div>
       <div class="stat-num" style="font-size:30px;margin-top:4px;">฿${money(totalSpent)}</div>
     </div>
@@ -1589,7 +1593,7 @@ function renderExpenseSummary(){
           `;
         }).join('')}
       </div>
-    ` : ''}
+    ` : ''}</div>
 
     <div class="card">
       <div style="font-weight:700;margin-bottom:4px;">แยกตามทริป</div>
@@ -1617,7 +1621,7 @@ function renderDiary(){
         <div class="title">ยังไม่มีบันทึก</div>
         <div>ระหว่างทาง...เป็นอย่างไรบ้าง?</div>
       </div>
-    ` : trips.map(t=>renderDiaryEntry(t)).join('')}
+    ` : `<div class="diary-grid">${trips.map(t=>renderDiaryEntry(t)).join('')}</div>`}
   `;
 }
 
